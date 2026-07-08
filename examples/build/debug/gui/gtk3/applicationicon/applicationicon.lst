@@ -1,0 +1,146 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : applicationicon.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Derived From: ZetCode GTK3 Examples
+     5                                  ; Description : A simple window centered on screen using gtk_window_set_icon_from_file
+     6                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     7                                  ; ==============================================================================
+     8                                  
+     9                                  bits 64
+    10                                  
+    11                                  [list -]
+    20                                  
+    21                                  section .data
+    22                                       window:
+    23 00000000 0000000000000000             .handle:       dq        0
+    24 00000008 77696E646F77207769-          .title:        db        "window with application icon",0
+    24 00000011 7468206170706C6963-
+    24 0000001A 6174696F6E2069636F-
+    24 00000023 6E00               
+    25 00000025 6170706C6963617469-          .class:        db        "applicationicon",0
+    25 0000002E 6F6E69636F6E00     
+    26                                  
+    27                                       signal:
+    28 00000035 64657374726F7900             .destroy:      db        "destroy",0
+    29                                  
+    30                                       icon:
+    31 0000003D 69636F6E3A2F686F6D-          .file:         db        "icon:/home/agguro/Projects/nasm-linux-archive/examples/gui/gtk3/applicationicon/resources/pictures/logo.png",0
+    31 00000046 652F61676775726F2F-
+    31 0000004F 50726F6A656374732F-
+    31 00000058 6E61736D2D6C696E75-
+    31 00000061 782D61726368697665-
+    31 0000006A 2F6578616D706C6573-
+    31 00000073 2F6775692F67746B33-
+    31 0000007C 2F6170706C69636174-
+    31 00000085 696F6E69636F6E2F72-
+    31 0000008E 65736F75726365732F-
+    31 00000097 70696374757265732F-
+    31 000000A0 6C6F676F2E706E6700 
+    32 000000A9 0000000000000000             .error:        dq        0
+    33                                  
+    34                                       app:
+    35 000000B1 6170706C6963617469-          .id:           db        "applicationicon",0
+    35 000000BA 6F6E69636F6E00     
+    36                                  
+    37                                       error:
+    38 000000C1 2573206E6F7420666F-          .nofile:       db        "%s not found or failed to load as icon.",10,0
+    38 000000CA 756E64206F72206661-
+    38 000000D3 696C656420746F206C-
+    38 000000DC 6F6164206173206963-
+    38 000000E5 6F6E2E0A00         
+    39                                  
+    40                                  section .text
+    41                                       global _start
+    42                                  
+    43                                  _start:
+    44                                       ; 1. Retrieve argc/argv and enforce System V AMD64 ABI Stack Alignment
+    45 00000000 488B3C24                     mov      rdi, [rsp]                ; argc
+    46 00000004 488D742408                   lea      rsi, [rsp + 8]            ; argv
+    47                                  
+    48 00000009 4989FC                       mov      r12, rdi                  ; Back-up argc
+    49 0000000C 4989F5                       mov      r13, rsi                  ; Back-up argv
+    50                                  
+    51 0000000F 4883E4F0                     and      rsp, -16                  ; Enforce 16-byte alignment
+    52 00000013 4883EC10                     sub      rsp, 16                   ; Reserved space for &argc and &argv
+    53                                  
+    54 00000017 488D3C24                     lea      rdi, [rsp]                ; Move &argc to stack
+    55 0000001B 4C8927                       mov      [rdi], r12
+    56 0000001E 488D742408                   lea      rsi, [rsp + 8]            ; Move &argv to stack
+    57 00000023 4C892E                       mov      [rsi], r13
+    58                                  
+    59 00000026 E8(00000000)                 call     gtk_init
+    60                                  
+    61                                       ; Set application ID for desktop environment matching
+    62 0000002B 48BF-                        mov      rdi, app.id
+    62 0000002D [B100000000000000] 
+    63 00000035 E8(00000000)                 call     g_set_prgname
+    64                                  
+    65                                       ; 2. Build and Configure Window
+    66 0000003A BF00000000                   mov      rdi, GTK_WINDOW_TOPLEVEL
+    67 0000003F E8(00000000)                 call     gtk_window_new
+    68 00000044 48890425[00000000]           mov      qword [window.handle], rax
+    69                                  
+    70                                       ; Map Window Manager Class for taskbar matching (KDE/Wayland fallback)
+    71 0000004C 488B3C25[00000000]           mov      rdi, qword [window.handle]
+    72 00000054 48BE-                        mov      rsi, window.class
+    72 00000056 [2500000000000000] 
+    73 0000005E 48BA-                        mov      rdx, window.class
+    73 00000060 [2500000000000000] 
+    74 00000068 E8(00000000)                 call     gtk_window_set_wmclass
+    75                                  
+    76                                       ; Set Window Properties
+    77 0000006D 488B3C25[00000000]           mov      rdi, qword [window.handle]
+    78 00000075 48BE-                        mov      rsi, window.title
+    78 00000077 [0800000000000000] 
+    79 0000007F E8(00000000)                 call     gtk_window_set_title
+    80                                  
+    81 00000084 488B3C25[00000000]           mov      rdi, qword [window.handle]
+    82 0000008C BEE6000000                   mov      rsi, 230
+    83 00000091 BA96000000                   mov      rdx, 150
+    84 00000096 E8(00000000)                 call     gtk_window_set_default_size
+    85                                  
+    86 0000009B 488B3C25[00000000]           mov      rdi, qword [window.handle]
+    87 000000A3 BE01000000                   mov      rsi, GTK_WIN_POS_CENTER
+    88 000000A8 E8(00000000)                 call     gtk_window_set_position
+    89                                  
+    90                                       ; 3. Apply Icon File Natively Via GTK
+    91 000000AD 488B3C25[00000000]           mov      rdi, qword [window.handle]
+    92 000000B5 48BE-                        mov      rsi, icon.file
+    92 000000B7 [3D00000000000000] 
+    93 000000BF 48BA-                        mov      rdx, icon.error
+    93 000000C1 [A900000000000000] 
+    94 000000C9 E8(00000000)                 call     gtk_window_set_icon_from_file
+    95                                  
+    96                                       ; Check return value (returns TRUE/1 on success)
+    97 000000CE 4821C0                       and      rax, rax
+    98 000000D1 751C                         jnz      .L_connect_signals
+    99                                  
+   100                                       ; Print warning if asset load failed
+   101 000000D3 48BE-                        mov      rsi, icon.file
+   101 000000D5 [3D00000000000000] 
+   102 000000DD 48BF-                        mov      rdi, error.nofile
+   102 000000DF [C100000000000000] 
+   103 000000E7 4831C0                       xor      rax, rax
+   104 000000EA E8(00000000)                 call     printf
+   105                                  
+   106                                       ; 4. Signals & Event Loop
+   107                                  .L_connect_signals:
+   108 000000EF 4531C9                       xor      r9d, r9d                  ; GConnectFlags = 0
+   109 000000F2 4531C0                       xor      r8d, r8d                  ; GClosureNotify = NULL
+   110 000000F5 4831C9                       xor      rcx, rcx                  ; user_data = NULL
+   111 000000F8 48BA-                        mov      rdx, gtk_main_quit
+   111 000000FA [0000000000000000] 
+   112 00000102 48BE-                        mov      rsi, signal.destroy
+   112 00000104 [3500000000000000] 
+   113 0000010C 488B3C25[00000000]           mov      rdi, qword [window.handle]
+   114 00000114 E8(00000000)                 call     g_signal_connect_data
+   115                                  
+   116                                       ; Show main window instance
+   117 00000119 488B3C25[00000000]           mov      rdi, qword [window.handle]
+   118 00000121 E8(00000000)                 call     gtk_widget_show
+   119                                  
+   120 00000126 E8(00000000)                 call     gtk_main
+   121                                  
+   122                                  .L_exit:
+   123 0000012B 4831FF                       xor      rdi, rdi                  ; Exit code 0
+   124 0000012E E8(00000000)                 call     exit

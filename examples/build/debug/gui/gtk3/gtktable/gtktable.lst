@@ -1,0 +1,144 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : gtktable.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : Grid layout using working stack-alignment
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .bss
+    21                                       window:
+    22 00000000 ????????????????             .handle:          resq      1
+    23                                       table:
+    24 00000008 ????????????????             .handle:          resq      1
+    25                                       button:
+    26 00000010 ????????????????             .handle:          resq      1
+    27 00000018 ????                         buffer:           resb      2
+    28                                  
+    29                                  section .data
+    30 00000000 47746B5461626C6500           window.title:     db        "GtkTable", 0
+    31                                       signal:
+    32 00000009 64657374726F7900             .destroy:         db        "destroy", 0
+    33 00000011 3738392F3435362A31-          values:           db        "789/456*123-0.=+"
+    33 0000001A 32332D302E3D2B     
+    34                                       lang:
+    35 00000021 4C414E4700                   .var:             db        "LANG", 0
+    36 00000026 4300                         .val:             db        "C", 0
+    37                                  
+    38                                  section .text
+    39                                       global _start
+    40                                  
+    41                                  _start:
+    42                                       ; 1. Stack Setup & Locale Hack
+    43 00000000 488B3C24                     mov        rdi, [rsp]
+    44 00000004 488D742408                   lea        rsi, [rsp + 8]
+    45 00000009 4989FC                       mov        r12, rdi
+    46 0000000C 4989F5                       mov        r13, rsi
+    47 0000000F 4883E4F0                     and        rsp, -16
+    48 00000013 4883EC10                     sub        rsp, 16
+    49 00000017 488D3C24                     lea        rdi, [rsp]
+    50 0000001B 4C8927                       mov        [rdi], r12
+    51 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    52 00000023 4C892E                       mov        [rsi], r13
+    53                                  
+    54 00000026 57                           push       rdi
+    55 00000027 56                           push       rsi
+    56 00000028 48BF-                        mov        rdi, lang.var
+    56 0000002A [2100000000000000] 
+    57 00000032 48BE-                        mov        rsi, lang.val
+    57 00000034 [2600000000000000] 
+    58 0000003C BA01000000                   mov        rdx, 1
+    59 00000041 E8(00000000)                 call       setenv
+    60 00000046 5E                           pop        rsi
+    61 00000047 5F                           pop        rdi
+    62                                  
+    63 00000048 E8(00000000)                 call       gtk_init
+    64                                  
+    65                                       ; 2. UI Setup
+    66 0000004D BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    67 00000052 E8(00000000)                 call       gtk_window_new
+    68 00000057 48890425[00000000]           mov        qword [window.handle], rax
+    69                                  
+    70 0000005F 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    71 00000067 48BE-                        mov        rsi, window.title
+    71 00000069 [0000000000000000] 
+    72 00000071 E8(00000000)                 call       gtk_window_set_title
+    73                                  
+    74 00000076 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    75 0000007E BEFA000000                   mov        rsi, 250
+    76 00000083 BAB4000000                   mov        rdx, 180
+    77 00000088 E8(00000000)                 call       gtk_window_set_default_size
+    78                                  
+    79 0000008D 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    80 00000095 BE05000000                   mov        rsi, 5
+    81 0000009A E8(00000000)                 call       gtk_container_set_border_width
+    82                                  
+    83 0000009F BF04000000                   mov        rdi, 4
+    84 000000A4 BE04000000                   mov        rsi, 4
+    85 000000A9 BA01000000                   mov        rdx, TRUE
+    86 000000AE E8(00000000)                 call       gtk_table_new
+    87 000000B3 48890425[08000000]           mov        qword [table.handle], rax
+    88                                  
+    89 000000BB 488B3C25[08000000]           mov        rdi, qword [table.handle]
+    90 000000C3 BE02000000                   mov        rsi, 2
+    91 000000C8 E8(00000000)                 call       gtk_table_set_row_spacings
+    92 000000CD 488B3C25[08000000]           mov        rdi, qword [table.handle]
+    93 000000D5 BE02000000                   mov        rsi, 2
+    94 000000DA E8(00000000)                 call       gtk_table_set_col_spacings
+    95                                  
+    96                                       ; Loop to create grid
+    97 000000DF 4831DB                       xor        rbx, rbx
+    98                                  .loop:
+    99 000000E2 8A83[11000000]               mov        al, [values + rbx]
+   100 000000E8 880425[18000000]             mov        [buffer], al
+   101 000000EF 48BF-                        mov        rdi, buffer
+   101 000000F1 [1800000000000000] 
+   102 000000F9 E8(00000000)                 call       gtk_button_new_with_label
+   103 000000FE 48890425[10000000]           mov        qword [button.handle], rax
+   104                                  
+   105 00000106 4889D8                       mov        rax, rbx
+   106 00000109 4831D2                       xor        rdx, rdx
+   107 0000010C B904000000                   mov        rcx, 4
+   108 00000111 48F7F1                       div        rcx
+   109                                  
+   110 00000114 488B3C25[08000000]           mov        rdi, qword [table.handle]
+   111 0000011C 488B3425[10000000]           mov        rsi, qword [button.handle]
+   112 00000124 4989C0                       mov        r8, rax                 ; top_attach
+   113 00000127 4989C1                       mov        r9, rax
+   114 0000012A 49FFC1                       inc        r9                      ; bottom_attach
+   115 0000012D 4889D2                       mov        rdx, rdx                ; left_attach (rdx from div)
+   116 00000130 4889D1                       mov        rcx, rdx
+   117 00000133 48FFC1                       inc        rcx                     ; right_attach
+   118                                  
+   119 00000136 4151                         push       r9
+   120 00000138 4150                         push       r8
+   121 0000013A E8(00000000)                 call       gtk_table_attach_defaults
+   122 0000013F 4883C410                     add        rsp, 16
+   123                                  
+   124 00000143 48FFC3                       inc        rbx
+   125 00000146 4883FB10                     cmp        rbx, 16
+   126 0000014A 7C96                         jl         .loop
+   127                                  
+   128 0000014C 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   129 00000154 488B3425[08000000]           mov        rsi, qword [table.handle]
+   130 0000015C E8(00000000)                 call       gtk_container_add
+   131                                  
+   132 00000161 4531C9                       xor        r9d, r9d
+   133 00000164 4531C0                       xor        r8d, r8d
+   134 00000167 4831C9                       xor        rcx, rcx
+   135 0000016A 48BA-                        mov        rdx, gtk_main_quit
+   135 0000016C [0000000000000000] 
+   136 00000174 48BE-                        mov        rsi, signal.destroy
+   136 00000176 [0900000000000000] 
+   137 0000017E 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   138 00000186 E8(00000000)                 call       g_signal_connect_data
+   139                                  
+   140 0000018B 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   141 00000193 E8(00000000)                 call       gtk_widget_show_all
+   142 00000198 E8(00000000)                 call       gtk_main
+   143                                  
+   144 0000019D 4831FF                       xor        rdi, rdi
+   145 000001A0 E8(00000000)                 call       exit

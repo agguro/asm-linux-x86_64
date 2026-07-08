@@ -1,0 +1,46 @@
+GAS LISTING utils/hackers_delight/hacker_bin2bcd.s 			page 1
+
+
+   1              	# -----------------------------------------------------------------------------
+   2              	# Name:        hacker_bin2bcd
+   3              	# Description: Double‑dabble (shift‑add‑3) conversion of 32‑bit binary → BCD.
+   4              	# Input:       EDI = binary value (32 bits)
+   5              	# Output:      RAX = BCD result (packed in 64 bits)
+   6              	# Notes:       Branchless nibble‑wise add‑3 using Hacker’s Delight masking.
+   7              	# -----------------------------------------------------------------------------
+   8              	
+   9              	    .section .text
+  10              	    .globl  hacker_bin2bcd
+  11              	    .type   hacker_bin2bcd, @function
+  12              	
+  13              	hacker_bin2bcd:
+  14 0000 4831C0   	    xor     %rax, %rax                        # clear BCD accumulator
+  15 0003 48C7C120 	    mov     $32, %rcx                         # 32 bits to process
+  15      000000
+  16              	
+  17              	.L_bcdloop:
+  18 000a 4889C2   	    mov     %rax, %rdx
+  19 000d 49B83333 	    movabsq $0x3333333333333333, %r8
+  19      33333333 
+  19      3333
+  20 0017 4C01C2   	    add     %r8, %rdx      # add 3 to every nibble
+  21 001a 49B98888 	    movabsq $0x8888888888888888, %r9
+  21      88888888 
+  21      8888
+  22 0024 4C85CA   	    test    %r9, %rdx      # detect nibble overflow
+  23              	
+  24 0027 D1E7     	    shl     $1, %edi                          # shift next input bit into CF
+  25 0029 48D1D0   	    rcl     $1, %rax                          # rotate CF into BCD accumulator
+  26              	
+  27 002c E2DC     	    loop    .L_bcdloop
+  28 002e C3       	    ret
+  29              	
+  30              	.size hacker_bin2bcd, . - hacker_bin2bcd
+  31              	.section .note.GNU-stack,"",@progbits
+GAS LISTING utils/hackers_delight/hacker_bin2bcd.s 			page 2
+
+
+DEFINED SYMBOLS
+utils/hackers_delight/hacker_bin2bcd.s:13     .text:0000000000000000 hacker_bin2bcd
+
+NO UNDEFINED SYMBOLS

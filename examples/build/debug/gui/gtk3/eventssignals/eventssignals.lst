@@ -1,0 +1,146 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : eventssignals.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : Events and signals introduction wrapper
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .data
+    21                                       window:
+    22 00000000 0000000000000000             .handle:       dq   0
+    23 00000008 47746B427574746F6E-          .title:        db   "GtkButton", 0
+    23 00000011 00                 
+    24                                  
+    25                                       fixed:
+    26 00000012 0000000000000000             .handle:       dq   0
+    27                                  
+    28                                       button:
+    29 0000001A 0000000000000000             .handle:       dq   0
+    30 00000022 436C69636B00                 .label:        db   "Click", 0
+    31                                  
+    32                                       signal:
+    33 00000028 636C69636B656400             .clicked:      db   "clicked", 0
+    34 00000030 64657374726F7900             .destroy:      db   "destroy", 0
+    35                                  
+    36                                       message:
+    37 00000038 436C69636B65640A00           .clicked:      db   "Clicked", 10, 0
+    38                                  
+    39                                  section .text
+    40                                       global _start
+    41                                  
+    42                                  _start:
+    43                                       ; -------------------------------------------------------------------------
+    44                                       ; 1. Retrieve argc/argv and enforce System V AMD64 ABI Stack Alignment
+    45                                       ; -------------------------------------------------------------------------
+    46 00000000 488B3C24                     mov        rdi, [rsp]                ; argc
+    47 00000004 488D742408                   lea        rsi, [rsp + 8]            ; argv
+    48                                  
+    49 00000009 4989FC                       mov        r12, rdi                  ; Back-up argc
+    50 0000000C 4989F5                       mov        r13, rsi                  ; Back-up argv
+    51                                  
+    52 0000000F 4883E4F0                     and        rsp, -16                  ; Enforce 16-byte alignment
+    53 00000013 4883EC10                     sub        rsp, 16                   ; Reserved space for &argc and &argv
+    54                                  
+    55 00000017 488D3C24                     lea        rdi, [rsp]                ; Move &argc to stack
+    56 0000001B 4C8927                       mov        [rdi], r12
+    57 0000001E 488D742408                   lea        rsi, [rsp + 8]            ; Move &argv to stack
+    58 00000023 4C892E                       mov        [rsi], r13
+    59                                  
+    60 00000026 E8(00000000)                 call       gtk_init
+    61                                  
+    62                                       ; -------------------------------------------------------------------------
+    63                                       ; 2. Build and Configure Window Layout
+    64                                       ; -------------------------------------------------------------------------
+    65 0000002B BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    66 00000030 E8(00000000)                 call       gtk_window_new
+    67 00000035 48890425[00000000]           mov        qword [window.handle], rax
+    68                                  
+    69 0000003D 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    70 00000045 48BE-                        mov        rsi, window.title
+    70 00000047 [0800000000000000] 
+    71 0000004F E8(00000000)                 call       gtk_window_set_title
+    72                                  
+    73 00000054 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    74 0000005C BEE6000000                   mov        rsi, 230
+    75 00000061 BA96000000                   mov        rdx, 150
+    76 00000066 E8(00000000)                 call       gtk_window_set_default_size
+    77                                  
+    78 0000006B 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    79 00000073 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+    80 00000078 E8(00000000)                 call       gtk_window_set_position
+    81                                  
+    82                                       ; Create Fixed Container
+    83 0000007D E8(00000000)                 call       gtk_fixed_new
+    84 00000082 48890425[12000000]           mov        qword [fixed.handle], rax
+    85                                  
+    86 0000008A 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    87 00000092 488B3425[12000000]           mov        rsi, qword [fixed.handle]
+    88 0000009A E8(00000000)                 call       gtk_container_add
+    89                                  
+    90                                       ; Create Button
+    91 0000009F 48BF-                        mov        rdi, button.label
+    91 000000A1 [2200000000000000] 
+    92 000000A9 E8(00000000)                 call       gtk_button_new_with_label
+    93 000000AE 48890425[1A000000]           mov        qword [button.handle], rax
+    94                                  
+    95 000000B6 488B3C25[12000000]           mov        rdi, qword [fixed.handle]
+    96 000000BE 488B3425[1A000000]           mov        rsi, qword [button.handle]
+    97 000000C6 BA32000000                   mov        rdx, 50
+    98 000000CB B932000000                   mov        rcx, 50
+    99 000000D0 E8(00000000)                 call       gtk_fixed_put
+   100                                  
+   101 000000D5 488B3C25[1A000000]           mov        rdi, qword [button.handle]
+   102 000000DD BE50000000                   mov        rsi, 80
+   103 000000E2 BA23000000                   mov        rdx, 35
+   104 000000E7 E8(00000000)                 call       gtk_widget_set_size_request
+   105                                  
+   106                                       ; -------------------------------------------------------------------------
+   107                                       ; 3. Signal Connections & Main Loop
+   108                                       ; -------------------------------------------------------------------------
+   109 000000EC 4531C9                       xor        r9d, r9d                  ; GConnectFlags = 0
+   110 000000EF 4531C0                       xor        r8d, r8d                  ; GClosureNotify = NULL
+   111 000000F2 4831C9                       xor        rcx, rcx                  ; user_data = NULL
+   112 000000F5 48BA-                        mov        rdx, button_clicked
+   112 000000F7 [5A01000000000000] 
+   113 000000FF 48BE-                        mov        rsi, signal.clicked
+   113 00000101 [2800000000000000] 
+   114 00000109 488B3C25[1A000000]           mov        rdi, qword [button.handle]
+   115 00000111 E8(00000000)                 call       g_signal_connect_data
+   116                                  
+   117 00000116 4531C9                       xor        r9d, r9d
+   118 00000119 4531C0                       xor        r8d, r8d
+   119 0000011C 4831C9                       xor        rcx, rcx
+   120 0000011F 48BA-                        mov        rdx, gtk_main_quit
+   120 00000121 [0000000000000000] 
+   121 00000129 48BE-                        mov        rsi, signal.destroy
+   121 0000012B [3000000000000000] 
+   122 00000133 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   123 0000013B E8(00000000)                 call       g_signal_connect_data
+   124                                  
+   125 00000140 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   126 00000148 E8(00000000)                 call       gtk_widget_show_all
+   127                                  
+   128 0000014D E8(00000000)                 call       gtk_main
+   129                                  
+   130 00000152 4831FF                       xor        rdi, rdi                  ; Exit code = 0
+   131 00000155 E8(00000000)                 call       exit
+   132                                  
+   133                                  ; -------------------------------------------------------------------------
+   134                                  ; Callback: button_clicked
+   135                                  ; -------------------------------------------------------------------------
+   136                                  button_clicked:
+   137 0000015A 55                           push       rbp
+   138 0000015B 4889E5                       mov        rbp, rsp
+   139 0000015E 4883E4F0                     and        rsp, -16                  ; Enforce 16-byte stack alignment
+   140                                  
+   141 00000162 48BF-                        mov        rdi, message.clicked
+   141 00000164 [3800000000000000] 
+   142 0000016C 4831C0                       xor        rax, rax
+   143 0000016F E8(00000000)                 call       g_print
+   144                                  
+   145 00000174 C9                           leave
+   146 00000175 C3                           ret

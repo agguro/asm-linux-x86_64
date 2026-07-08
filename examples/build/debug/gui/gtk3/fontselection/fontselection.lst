@@ -1,0 +1,248 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : fontselection.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : Minimalist bare-metal font selection dialogbox with dynamic 
+     5                                  ;               layout refresh
+     6                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     7                                  ; ==============================================================================
+     8                                  
+     9                                  bits 64
+    10                                  
+    11                                  [list -]
+    21                                  
+    22                                  section .bss
+    23 00000000 ????????????????             target_label:     resq    1
+    24                                  
+    25                                  section .data
+    26                                       window:
+    27 00000000 0000000000000000             .handle:          dq   0
+    28 00000008 466F6E742053656C65-          .title:           db   "Font Selection Dialog", 0
+    28 00000011 6374696F6E20446961-
+    28 0000001A 6C6F6700           
+    29                                  
+    30                                       signal:
+    31 0000001E 64657374726F7900             .destroy:         db   "destroy", 0
+    32 00000026 636C69636B656400             .clicked:         db   "clicked", 0
+    33                                  
+    34                                       label:
+    35 0000002E 0000000000000000             .handle:          dq   0
+    36 00000036 546869732069732074-          .caption:         db   "This is the demonstration text", 0
+    36 0000003F 68652064656D6F6E73-
+    36 00000048 74726174696F6E2074-
+    36 00000051 65787400           
+    37                                  
+    38                                       box:
+    39 00000055 0000000000000000             .handle:          dq   0
+    40                                       
+    41                                       toolbar:
+    42 0000005D 0000000000000000             .handle:          dq   0
+    43                                       
+    44                                       button:
+    45 00000065 0000000000000000             .handle:          dq   0
+    46                                  
+    47 0000006D 0000000000000000             font_name:        dq   0
+    48 00000075 0000000000000000             font_description: dq   0
+    49                                  
+    50 0000007D 00000000                     result:           dd   0
+    51                                       dialog:
+    52 00000081 0000000000000000             .handle:          dq   0
+    53 00000089 53656C65637420466F-          .title:           db   "Select Font", 0
+    53 00000092 6E7400             
+    54                                  
+    55 00000095 67746B2D73656C6563-          GTK_STOCK_SELECT_FONT:   db   "gtk-select-font", 0
+    55 0000009E 742D666F6E7400     
+    56                                  
+    57                                  section .text
+    58                                          global _start
+    59                                  
+    60                                  _start:
+    61                                       ; 1. Stack Alignment conform System V AMD64 ABI
+    62 00000000 488B3C24                     mov        rdi, [rsp]                ; argc
+    63 00000004 488D742408                   lea        rsi, [rsp + 8]            ; argv
+    64                                  
+    65 00000009 4989FC                       mov        r12, rdi
+    66 0000000C 4989F5                       mov        r13, rsi
+    67                                  
+    68 0000000F 4883E4F0                     and        rsp, -16
+    69 00000013 4883EC10                     sub        rsp, 16
+    70                                  
+    71 00000017 488D3C24                     lea        rdi, [rsp]
+    72 0000001B 4C8927                       mov        [rdi], r12
+    73 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    74 00000023 4C892E                       mov        [rsi], r13
+    75                                  
+    76 00000026 E8(00000000)                 call       gtk_init
+    77                                  
+    78                                       ; 2. GUI Component Composition
+    79 0000002B BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    80 00000030 E8(00000000)                 call       gtk_window_new
+    81 00000035 48890425[00000000]           mov        qword [window.handle], rax
+    82                                  
+    83 0000003D 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    84 00000045 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+    85 0000004A E8(00000000)                 call       gtk_window_set_position
+    86                                  
+    87 0000004F 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    88 00000057 BEF4010000                   mov        rsi, 500
+    89 0000005C BAC8000000                   mov        rdx, 200
+    90 00000061 E8(00000000)                 call       gtk_window_set_default_size
+    91                                  
+    92 00000066 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    93 0000006E 48BE-                        mov        rsi, window.title
+    93 00000070 [0800000000000000] 
+    94 00000078 E8(00000000)                 call       gtk_window_set_title
+    95                                  
+    96 0000007D BF01000000                   mov        rdi, GTK_ORIENTATION_VERTICAL
+    97 00000082 4831F6                       xor        rsi, rsi
+    98 00000085 E8(00000000)                 call       gtk_box_new
+    99 0000008A 48890425[55000000]           mov        qword [box.handle], rax
+   100                                  
+   101 00000092 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   102 0000009A 488B3425[55000000]           mov        rsi, qword [box.handle]
+   103 000000A2 E8(00000000)                 call       gtk_container_add
+   104                                  
+   105 000000A7 E8(00000000)                 call       gtk_toolbar_new
+   106 000000AC 48890425[5D000000]           mov        qword [toolbar.handle], rax
+   107                                  
+   108 000000B4 488B3C25[5D000000]           mov        rdi, qword [toolbar.handle]
+   109 000000BC BE00000000                   mov        rsi, GTK_TOOLBAR_ICONS
+   110 000000C1 E8(00000000)                 call       gtk_toolbar_set_style
+   111                                  
+   112 000000C6 488B3C25[5D000000]           mov        rdi, qword [toolbar.handle]
+   113 000000CE BE02000000                   mov        rsi, 2
+   114 000000D3 E8(00000000)                 call       gtk_container_set_border_width
+   115                                  
+   116 000000D8 48BF-                        mov        rdi, GTK_STOCK_SELECT_FONT
+   116 000000DA [9500000000000000] 
+   117 000000E2 E8(00000000)                 call       gtk_tool_button_new_from_stock
+   118 000000E7 48890425[65000000]           mov        qword [button.handle], rax
+   119                                  
+   120 000000EF 488B3C25[5D000000]           mov        rdi, qword [toolbar.handle]
+   121 000000F7 488B3425[65000000]           mov        rsi, qword [button.handle]
+   122 000000FF 48C7C2FFFFFFFF               mov        rdx, -1
+   123 00000106 E8(00000000)                 call       gtk_toolbar_insert
+   124                                  
+   125 0000010B 488B3C25[55000000]           mov        rdi, qword [box.handle]
+   126 00000113 488B3425[5D000000]           mov        rsi, qword [toolbar.handle]
+   127 0000011B BA00000000                   mov        rdx, FALSE
+   128 00000120 B900000000                   mov        rcx, FALSE
+   129 00000125 41B805000000                 mov        r8d, 5
+   130 0000012B E8(00000000)                 call       gtk_box_pack_start
+   131                                  
+   132 00000130 48BF-                        mov        rdi, label.caption
+   132 00000132 [3600000000000000] 
+   133 0000013A E8(00000000)                 call       gtk_label_new
+   134 0000013F 48890425[2E000000]           mov        qword [label.handle], rax
+   135                                  
+   136 00000147 488B3C25[2E000000]           mov        rdi, qword [label.handle]
+   137 0000014F BE02000000                   mov        rsi, GTK_JUSTIFY_CENTER
+   138 00000154 E8(00000000)                 call       gtk_label_set_justify
+   139                                  
+   140 00000159 488B3C25[55000000]           mov        rdi, qword [box.handle]
+   141 00000161 488B3425[2E000000]           mov        rsi, qword [label.handle]
+   142 00000169 BA01000000                   mov        rdx, TRUE
+   143 0000016E B900000000                   mov        rcx, FALSE
+   144 00000173 41B805000000                 mov        r8d, 5
+   145 00000179 E8(00000000)                 call       gtk_box_pack_start
+   146                                  
+   147                                       ; 3. Signal Configuration
+   148 0000017E 4531C9                       xor        r9d, r9d
+   149 00000181 4531C0                       xor        r8d, r8d
+   150 00000184 488B0C25[2E000000]           mov        rcx, qword [label.handle]
+   151 0000018C 48BA-                        mov        rdx, select_font
+   151 0000018E [FE01000000000000] 
+   152 00000196 48BE-                        mov        rsi, signal.clicked
+   152 00000198 [2600000000000000] 
+   153 000001A0 488B3C25[65000000]           mov        rdi, qword [button.handle]
+   154 000001A8 E8(00000000)                 call       g_signal_connect_data
+   155                                  
+   156 000001AD 4531C9                       xor        r9d, r9d
+   157 000001B0 4531C0                       xor        r8d, r8d
+   158 000001B3 4831C9                       xor        rcx, rcx
+   159 000001B6 48BA-                        mov        rdx, gtk_main_quit
+   159 000001B8 [0000000000000000] 
+   160 000001C0 48BE-                        mov        rsi, signal.destroy
+   160 000001C2 [1E00000000000000] 
+   161 000001CA 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   162 000001D2 E8(00000000)                 call       g_signal_connect_data
+   163                                  
+   164 000001D7 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   165 000001DF E8(00000000)                 call       gtk_window_set_modal
+   166                                  
+   167 000001E4 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   168 000001EC E8(00000000)                 call       gtk_widget_show_all
+   169                                  
+   170 000001F1 E8(00000000)                 call       gtk_main
+   171                                  
+   172                                  .L_exit:
+   173 000001F6 4831FF                       xor        rdi, rdi
+   174 000001F9 E8(00000000)                 call       exit
+   175                                  
+   176                                  ; Callback: select_font
+   177                                  select_font:
+   178 000001FE 55                           push       rbp
+   179 000001FF 4889E5                       mov        rbp, rsp
+   180 00000202 4883E4F0                     and        rsp, -16
+   181                                  
+   182 00000206 48893425[00000000]           mov        qword [target_label], rsi
+   183                                  
+   184 0000020E 48BF-                        mov        rdi, dialog.title
+   184 00000210 [8900000000000000] 
+   185 00000218 E8(00000000)                 call       gtk_font_selection_dialog_new
+   186 0000021D 48890425[81000000]           mov        qword [dialog.handle], rax
+   187                                  
+   188 00000225 488B3C25[81000000]           mov        rdi, qword [dialog.handle]
+   189 0000022D 488B3425[00000000]           mov        rsi, qword [window.handle]
+   190 00000235 E8(00000000)                 call       gtk_window_set_transient_for
+   191                                  
+   192                                  .L_dialog_loop:
+   193 0000023A 488B3C25[81000000]           mov        rdi, qword [dialog.handle]
+   194 00000242 E8(00000000)                 call       gtk_dialog_run
+   195 00000247 890425[7D000000]             mov        dword [result], eax
+   196                                  
+   197 0000024E 83F8FB                       cmp        eax, GTK_RESPONSE_OK
+   198 00000251 740E                         je         .L_set_font_and_close
+   199 00000253 83F8F6                       cmp        eax, GTK_RESPONSE_APPLY
+   200 00000256 7402                         je         .L_set_font_apply
+   201 00000258 EB71                         jmp        .L_exit_callback
+   202                                  
+   203                                  .L_set_font_apply:
+   204 0000025A E809000000                   call       .applyFont_internal
+   205 0000025F EBD9                         jmp        .L_dialog_loop
+   206                                  
+   207                                  .L_set_font_and_close:
+   208 00000261 E802000000                   call       .applyFont_internal
+   209 00000266 EB63                         jmp        .L_exit_callback
+   210                                  
+   211                                  .applyFont_internal:
+   212 00000268 55                           push       rbp
+   213 00000269 4889E5                       mov        rbp, rsp
+   214 0000026C 4883E4F0                     and        rsp, -16
+   215                                  
+   216 00000270 488B3C25[81000000]           mov        rdi, qword [dialog.handle]
+   217 00000278 E8(00000000)                 call       gtk_font_selection_dialog_get_font_name
+   218 0000027D 48890425[6D000000]           mov        qword [font_name], rax
+   219                                  
+   220 00000285 488B3C25[6D000000]           mov        rdi, qword [font_name]
+   221 0000028D E8(00000000)                 call       pango_font_description_from_string
+   222 00000292 48890425[75000000]           mov        qword [font_description], rax
+   223                                  
+   224 0000029A 488B3C25[00000000]           mov        rdi, qword [target_label]
+   225 000002A2 488B3425[75000000]           mov        rsi, qword [font_description]
+   226 000002AA E8(00000000)                 call       gtk_widget_modify_font
+   227                                  
+   228 000002AF 488B3C25[00000000]           mov        rdi, qword [target_label]
+   229 000002B7 E8(00000000)                 call       gtk_widget_queue_draw
+   230                                  
+   231 000002BC 488B3C25[6D000000]           mov        rdi, qword [font_name]
+   232 000002C4 E8(00000000)                 call       g_free
+   233                                  
+   234 000002C9 C9                           leave
+   235 000002CA C3                           ret
+   236                                  
+   237                                  .L_exit_callback:
+   238 000002CB 488B3C25[81000000]           mov        rdi, qword [dialog.handle]
+   239 000002D3 E8(00000000)                 call       gtk_widget_destroy
+   240                                  
+   241 000002D8 C9                           leave
+   242 000002D9 C3                           ret

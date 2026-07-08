@@ -1,0 +1,108 @@
+GAS LISTING utils/math/merge_shuffle.s 			page 1
+
+
+   1              	/* 
+   2              	 ***************************************************************************
+   3              	 * Name        : merge_shuffle.s
+   4              	 * Description : A recursive, divide-and-conquer shuffling algorithm.
+   5              	 * Simulates randomness by interleaving sub-sections of the buffer.
+   6              	 *
+   7              	 * ABI         : System V AMD64 (Linux)
+   8              	 * Input       : %rdi = Pointer to the buffer
+   9              	 * %rsi = Number of elements in the buffer (N)
+  10              	 * Output      : None (Buffer is shuffled in-place)
+  11              	 *
+  12              	 * Strategy    : Recursively splits the buffer into halves until the base 
+  13              	 * case (1 element) is reached. During the merge phase, 
+  14              	 * uses 'rdtsc' as a binary "coin flip" to decide whether to 
+  15              	 * interleave elements from the left or right sub-arrays, 
+  16              	 * utilizing the CPU stack for recursion state.
+  17              	 * **************************************************************************
+  18              	 */
+  19              	
+  20              	.section .text
+  21              	.globl merge_shuffle
+  22              	.type merge_shuffle, @function
+  23              	
+  24              	merge_shuffle:
+  25              	    # --- 1. Base Case: If size (%rsi) <= 1, exit ---
+  26 0000 4883FE01 	    cmpq    $1, %rsi
+  27 0004 7E5E     	    jle     .Ldone                  
+  28              	
+  29              	    # --- 2. Save Stack Frame & Callee-Saved Regs ---
+  30 0006 55       	    pushq   %rbp
+  31 0007 4889E5   	    movq    %rsp, %rbp
+  32 000a 4154     	    pushq   %r12                    # Store current Buffer Pointer
+  33 000c 4155     	    pushq   %r13                    # Store current Size
+  34 000e 4156     	    pushq   %r14                    # Store Midpoint Offset
+  35              	
+  36 0010 4989FC   	    movq    %rdi, %r12              
+  37 0013 4989F5   	    movq    %rsi, %r13              
+  38              	
+  39              	    # Calculate Midpoint Offset
+  40 0016 4D89EE   	    movq    %r13, %r14
+  41 0019 49D1EE   	    shrq    $1, %r14                # r14 = Size / 2 (e.g., 26)
+  42              	
+  43              	    # --- 3. Recurse Left Half (r12 to r12 + r14) ---
+  44 001c 4C89E7   	    movq    %r12, %rdi              # Start of buffer
+  45 001f 4C89F6   	    movq    %r14, %rsi              # Left size
+  46 0022 E8000000 	    call    merge_shuffle
+  46      00
+  47              	
+  48              	    # --- 4. Recurse Right Half (r12 + r14 to r12 + r13) ---
+  49 0027 4C89E7   	    movq    %r12, %rdi
+  50 002a 4C01F7   	    addq    %r14, %rdi              # rdi = Start + Midpoint
+  51 002d 4C89EE   	    movq    %r13, %rsi
+  52 0030 4C29F6   	    subq    %r14, %rsi              # rsi = Total - Left
+  53 0033 E8000000 	    call    merge_shuffle
+  53      00
+  54              	
+  55              	    # --- 5. Merge Phase (Interleave) ---
+GAS LISTING utils/math/merge_shuffle.s 			page 2
+
+
+  56              	    # We walk RCX from Size-1 down to 0
+  57 0038 4C89E9   	    movq    %r13, %rcx              
+  58              	.Lmerge_loop:
+  59 003b 48FFC9   	    decq    %rcx                    # rcx is now the current index (0..51)
+  60              	    
+  61 003e 0F31     	    rdtsc                           # Get random bit
+  62 0040 A801     	    testb   $1, %al
+  63 0042 7414     	    jz      .Lskip_swap
+  64              	
+  65              	    # WE DO NOT USE (%r12, %rax) HERE.
+  66              	    # We calculate the addresses explicitly to see them in GDB.
+  67              	    
+  68              	    # Target 1: Current loop index
+  69 0044 4D8D040C 	    leaq    (%r12, %rcx), %r8       # r8 = address of current element
+  70              	    
+  71              	    # Target 2: The Midpoint
+  72 0048 4F8D0C34 	    leaq    (%r12, %r14), %r9       # r9 = address of midpoint element
+  73              	
+  74              	    # Perform the Swap using registers
+  75 004c 418A00   	    movb    (%r8), %al
+  76 004f 418A19   	    movb    (%r9), %bl
+  77 0052 418818   	    movb    %bl, (%r8)
+  78 0055 418801   	    movb    %al, (%r9)
+  79              	
+  80              	.Lskip_swap:
+  81 0058 4885C9   	    testq   %rcx, %rcx              # Manual loop to ensure rcx stays positive
+  82 005b 75DE     	    jnz     .Lmerge_loop
+  83              	
+  84              	    # --- 6. Cleanup ---
+  85 005d 415E     	    popq    %r14
+  86 005f 415D     	    popq    %r13
+  87 0061 415C     	    popq    %r12
+  88 0063 5D       	    popq    %rbp
+  89              	.Ldone:
+  90 0064 C3       	    ret
+  91              	
+  92              	.size merge_shuffle, .-merge_shuffle
+  93              	.section .note.GNU-stack,"",@progbits
+GAS LISTING utils/math/merge_shuffle.s 			page 3
+
+
+DEFINED SYMBOLS
+utils/math/merge_shuffle.s:24     .text:0000000000000000 merge_shuffle
+
+NO UNDEFINED SYMBOLS

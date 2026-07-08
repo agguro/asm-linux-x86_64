@@ -1,0 +1,281 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : undoredo.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : GtkToolbar demonstration toggling sensitivity of operations
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .bss
+    21                                       window:
+    22 00000000 ????????????????             .handle:          resq      1
+    23 00000008 ????????????????             pixbuffer:        resq      1
+    24 00000010 ????????????????             error:            resq      1
+    25                                       box:
+    26 00000018 ????????????????             .handle:          resq      1
+    27                                       toolbar:
+    28 00000020 ????????????????             .handle:          resq      1
+    29                                       tool:
+    30 00000028 ????????????????             .undo:            resq      1
+    31 00000030 ????????????????             .redo:            resq      1
+    32 00000038 ????????????????             .sep:             resq      1
+    33 00000040 ????????????????             .quit:            resq      1
+    34                                  
+    35                                  section .data
+    36                                       mainwindow:
+    37 00000000 556E646F2F5265646F-          .title:           db        "Undo/Redo Toolbar", 0
+    37 00000009 20546F6F6C62617200 
+    38                                       
+    39                                       signal:
+    40 00000012 636C69636B656400             .clicked:         db        "clicked", 0
+    41 0000001A 64657374726F7900             .destroy:         db        "destroy", 0
+    42                                  
+    43                                       icon:
+    44 00000022 7265736F7572636573-          .file:            db        "resources/pictures/logo.png", 0
+    44 0000002B 2F7069637475726573-
+    44 00000034 2F6C6F676F2E706E67-
+    44 0000003D 00                 
+    45                                  
+    46                                       toolbaritem.text:
+    47 0000003E 67746B2D756E646F00           .undo:            db        "gtk-undo", 0
+    48 00000047 756E646F00                   .undoname:        db        "undo", 0
+    49 0000004C 67746B2D7265646F00           .redo:            db        "gtk-redo", 0
+    50 00000055 7265646F00                   .redoname:        db        "redo", 0
+    51 0000005A 67746B2D7175697400           .quit:            db        "gtk-quit", 0
+    52                                  
+    53 00000063 02000000                     state.count:      dd        2
+    54                                  
+    55                                  section .text
+    56                                       global _start
+    57                                  
+    58                                  _start:
+    59                                       ; 1. Stack Alignment conform System V AMD64 ABI
+    60 00000000 488B3C24                     mov        rdi, [rsp]
+    61 00000004 488D742408                   lea        rsi, [rsp + 8]
+    62 00000009 4989FC                       mov        r12, rdi
+    63 0000000C 4989F5                       mov        r13, rsi
+    64                                  
+    65 0000000F 4883E4F0                     and        rsp, -16
+    66 00000013 4883EC10                     sub        rsp, 16
+    67 00000017 488D3C24                     lea        rdi, [rsp]
+    68 0000001B 4C8927                       mov        [rdi], r12
+    69 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    70 00000023 4C892E                       mov        [rsi], r13
+    71                                  
+    72 00000026 E8(00000000)                 call       gtk_init
+    73                                  
+    74                                       ; 2. Build Window
+    75 0000002B BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    76 00000030 E8(00000000)                 call       gtk_window_new
+    77 00000035 48890425[00000000]           mov        qword [window.handle], rax
+    78 0000003D 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    79 00000045 BE01000000                   mov        rsi, 1
+    80 0000004A E8(00000000)                 call       gtk_window_set_position
+    81 0000004F 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    82 00000057 BEFA000000                   mov        rsi, 250
+    83 0000005C BAC8000000                   mov        rdx, 200
+    84 00000061 E8(00000000)                 call       gtk_window_set_default_size
+    85 00000066 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    86 0000006E 48BE-                        mov        rsi, mainwindow.title
+    86 00000070 [0000000000000000] 
+    87 00000078 E8(00000000)                 call       gtk_window_set_title
+    88                                  
+    89 0000007D 48BF-                        mov        rdi, icon.file
+    89 0000007F [2200000000000000] 
+    90 00000087 48BE-                        mov        rsi, error
+    90 00000089 [1000000000000000] 
+    91 00000091 E8(00000000)                 call       gdk_pixbuf_new_from_file
+    92 00000096 48890425[08000000]           mov        qword [pixbuffer], rax
+    93 0000009E 488B3C25[00000000]           mov        rdi, qword [window.handle]
+    94 000000A6 488B3425[08000000]           mov        rsi, qword [pixbuffer]
+    95 000000AE E8(00000000)                 call       gtk_window_set_icon
+    96                                  
+    97 000000B3 BF01000000                   mov        rdi, GTK_ORIENTATION_VERTICAL
+    98 000000B8 4831F6                       xor        rsi, rsi
+    99 000000BB E8(00000000)                 call       gtk_box_new
+   100 000000C0 48890425[18000000]           mov        qword [box.handle], rax
+   101 000000C8 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   102 000000D0 488B3425[18000000]           mov        rsi, qword [box.handle]
+   103 000000D8 E8(00000000)                 call       gtk_container_add
+   104                                  
+   105                                       ; 3. Assemble Toolbar
+   106 000000DD E8(00000000)                 call       gtk_toolbar_new
+   107 000000E2 48890425[20000000]           mov        qword [toolbar.handle], rax
+   108 000000EA 488B3C25[20000000]           mov        rdi, qword [toolbar.handle]
+   109 000000F2 4831F6                       xor        rsi, rsi
+   110 000000F5 E8(00000000)                 call       gtk_toolbar_set_style
+   111 000000FA 488B3C25[20000000]           mov        rdi, qword [toolbar.handle]
+   112 00000102 BE02000000                   mov        rsi, 2
+   113 00000107 E8(00000000)                 call       gtk_container_set_border_width
+   114                                  
+   115                                       %macro add_tool 3
+   116                                          mov     rdi, %1
+   117                                          call    gtk_tool_button_new_from_stock
+   118                                          mov     qword [%2], rax
+   119                                          mov     rdi, qword [%2]
+   120                                          mov     rsi, %3
+   121                                          call    gtk_widget_set_name
+   122                                          mov     rdi, qword [toolbar.handle]
+   123                                          mov     rsi, qword [%2]
+   124                                          mov     rdx, -1
+   125                                          call    gtk_toolbar_insert
+   126                                       %endmacro
+   127                                  
+   128                                       add_tool toolbaritem.text.undo, tool.undo, toolbaritem.text.undoname
+   116 0000010C 48BF-               <1>  mov rdi, %1
+   116 0000010E [3E00000000000000]  <1>
+   117 00000116 E8(00000000)        <1>  call gtk_tool_button_new_from_stock
+   118 0000011B 48890425[28000000]  <1>  mov qword [%2], rax
+   119 00000123 488B3C25[28000000]  <1>  mov rdi, qword [%2]
+   120 0000012B 48BE-               <1>  mov rsi, %3
+   120 0000012D [4700000000000000]  <1>
+   121 00000135 E8(00000000)        <1>  call gtk_widget_set_name
+   122 0000013A 488B3C25[20000000]  <1>  mov rdi, qword [toolbar.handle]
+   123 00000142 488B3425[28000000]  <1>  mov rsi, qword [%2]
+   124 0000014A 48C7C2FFFFFFFF      <1>  mov rdx, -1
+   125 00000151 E8(00000000)        <1>  call gtk_toolbar_insert
+   129                                       add_tool toolbaritem.text.redo, tool.redo, toolbaritem.text.redoname
+   116 00000156 48BF-               <1>  mov rdi, %1
+   116 00000158 [4C00000000000000]  <1>
+   117 00000160 E8(00000000)        <1>  call gtk_tool_button_new_from_stock
+   118 00000165 48890425[30000000]  <1>  mov qword [%2], rax
+   119 0000016D 488B3C25[30000000]  <1>  mov rdi, qword [%2]
+   120 00000175 48BE-               <1>  mov rsi, %3
+   120 00000177 [5500000000000000]  <1>
+   121 0000017F E8(00000000)        <1>  call gtk_widget_set_name
+   122 00000184 488B3C25[20000000]  <1>  mov rdi, qword [toolbar.handle]
+   123 0000018C 488B3425[30000000]  <1>  mov rsi, qword [%2]
+   124 00000194 48C7C2FFFFFFFF      <1>  mov rdx, -1
+   125 0000019B E8(00000000)        <1>  call gtk_toolbar_insert
+   130                                       
+   131 000001A0 E8(00000000)                 call       gtk_separator_tool_item_new
+   132 000001A5 48890425[38000000]           mov        qword [tool.sep], rax
+   133 000001AD 488B3C25[20000000]           mov        rdi, qword [toolbar.handle]
+   134 000001B5 488B3425[38000000]           mov        rsi, qword [tool.sep]
+   135 000001BD 48C7C2FFFFFFFF               mov        rdx, -1
+   136 000001C4 E8(00000000)                 call       gtk_toolbar_insert
+   137                                  
+   138 000001C9 48BF-                        mov        rdi, toolbaritem.text.quit
+   138 000001CB [5A00000000000000] 
+   139 000001D3 E8(00000000)                 call       gtk_tool_button_new_from_stock
+   140 000001D8 48890425[40000000]           mov        qword [tool.quit], rax
+   141 000001E0 488B3C25[20000000]           mov        rdi, qword [toolbar.handle]
+   142 000001E8 488B3425[40000000]           mov        rsi, qword [tool.quit]
+   143 000001F0 48C7C2FFFFFFFF               mov        rdx, -1
+   144 000001F7 E8(00000000)                 call       gtk_toolbar_insert
+   145                                  
+   146 000001FC 488B3C25[18000000]           mov        rdi, qword [box.handle]
+   147 00000204 488B3425[20000000]           mov        rsi, qword [toolbar.handle]
+   148 0000020C 4831D2                       xor        rdx, rdx
+   149 0000020F 4831C9                       xor        rcx, rcx
+   150 00000212 41B805000000                 mov        r8d, 5
+   151 00000218 E8(00000000)                 call       gtk_box_pack_start
+   152                                  
+   153                                       ; 4. Signals
+   154                                       %macro connect_sig 4
+   155                                          xor     r9d, r9d
+   156                                          xor     r8d, r8d
+   157                                          mov     rcx, %3
+   158                                          mov     rdx, %4
+   159                                          mov     rsi, signal.clicked
+   160                                          mov     rdi, %1
+   161                                          call    g_signal_connect_data
+   162                                       %endmacro
+   163                                  
+   164                                       connect_sig [tool.undo], 0, qword [tool.redo], proc_undo_redo
+   155 0000021D 4531C9              <1>  xor r9d, r9d
+   156 00000220 4531C0              <1>  xor r8d, r8d
+   157 00000223 488B0C25[30000000]  <1>  mov rcx, %3
+   158 0000022B 48BA-               <1>  mov rdx, %4
+   158 0000022D [EB02000000000000]  <1>
+   159 00000235 48BE-               <1>  mov rsi, signal.clicked
+   159 00000237 [1200000000000000]  <1>
+   160 0000023F 488B3C25[28000000]  <1>  mov rdi, %1
+   161 00000247 E8(00000000)        <1>  call g_signal_connect_data
+   165                                       connect_sig [tool.redo], 0, qword [tool.undo], proc_undo_redo
+   155 0000024C 4531C9              <1>  xor r9d, r9d
+   156 0000024F 4531C0              <1>  xor r8d, r8d
+   157 00000252 488B0C25[28000000]  <1>  mov rcx, %3
+   158 0000025A 48BA-               <1>  mov rdx, %4
+   158 0000025C [EB02000000000000]  <1>
+   159 00000264 48BE-               <1>  mov rsi, signal.clicked
+   159 00000266 [1200000000000000]  <1>
+   160 0000026E 488B3C25[30000000]  <1>  mov rdi, %1
+   161 00000276 E8(00000000)        <1>  call g_signal_connect_data
+   166                                       connect_sig [tool.quit], 0, 0, gtk_main_quit
+   155 0000027B 4531C9              <1>  xor r9d, r9d
+   156 0000027E 4531C0              <1>  xor r8d, r8d
+   157 00000281 B900000000          <1>  mov rcx, %3
+   158 00000286 48BA-               <1>  mov rdx, %4
+   158 00000288 [0000000000000000]  <1>
+   159 00000290 48BE-               <1>  mov rsi, signal.clicked
+   159 00000292 [1200000000000000]  <1>
+   160 0000029A 488B3C25[40000000]  <1>  mov rdi, %1
+   161 000002A2 E8(00000000)        <1>  call g_signal_connect_data
+   167                                       
+   168 000002A7 4531C9                       xor        r9d, r9d
+   169 000002AA 4531C0                       xor        r8d, r8d
+   170 000002AD 4831C9                       xor        rcx, rcx
+   171 000002B0 48BA-                        mov        rdx, gtk_main_quit
+   171 000002B2 [0000000000000000] 
+   172 000002BA 48BE-                        mov        rsi, signal.destroy
+   172 000002BC [1A00000000000000] 
+   173 000002C4 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   174 000002CC E8(00000000)                 call       g_signal_connect_data
+   175                                  
+   176 000002D1 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   177 000002D9 E8(00000000)                 call       gtk_widget_show_all
+   178 000002DE E8(00000000)                 call       gtk_main
+   179 000002E3 4831FF                       xor        rdi, rdi
+   180 000002E6 E8(00000000)                 call       exit
+   181                                  
+   182                                  ; Callback
+   183                                  proc_undo_redo:
+   184 000002EB 4154                         push r12
+   185 000002ED 4155                         push r13
+   186 000002EF 4156                         push r14
+   187 000002F1 55                           push rbp
+   188 000002F2 4889E5                       mov rbp, rsp
+   189 000002F5 4883E4F0                     and rsp, -16
+   190                                  
+   191 000002F9 4989FE                       mov r14, rdi
+   192                                       
+   193 000002FC 4C89F7                       mov rdi, r14
+   194 000002FF E8(00000000)                 call gtk_widget_get_name
+   195 00000304 4889C7                       mov rdi, rax
+   196 00000307 48BE-                        mov rsi, toolbaritem.text.undoname
+   196 00000309 [4700000000000000] 
+   197 00000311 E8(00000000)                 call strcmp
+   198 00000316 85C0                         test eax, eax
+   199 00000318 7409                         jz .undo
+   200                                       
+   201                                  .redo:
+   202 0000031A FF0425[63000000]             inc dword [state.count]
+   203 00000321 EB07                         jmp .eval
+   204                                  .undo:
+   205 00000323 FF0C25[63000000]             dec dword [state.count]
+   206                                  
+   207                                  .eval:
+   208 0000032A 448B2425[63000000]           mov r12d, dword [state.count]
+   209                                       
+   210 00000332 488B3C25[28000000]           mov rdi, qword [tool.undo]
+   211 0000033A 4831F6                       xor rsi, rsi
+   212 0000033D 4183FC00                     cmp r12d, 0
+   213 00000341 400F9FC6                     setg sil
+   214 00000345 E8(00000000)                 call gtk_widget_set_sensitive
+   215                                       
+   216 0000034A 488B3C25[30000000]           mov rdi, qword [tool.redo]
+   217 00000352 4831F6                       xor rsi, rsi
+   218 00000355 4183FC05                     cmp r12d, 5
+   219 00000359 400F9CC6                     setl sil
+   220 0000035D E8(00000000)                 call gtk_widget_set_sensitive
+   221                                  
+   222                                  .done:
+   223 00000362 C9                           leave
+   224 00000363 415E                         pop r14
+   225 00000365 415D                         pop r13
+   226 00000367 415C                         pop r12
+   227 00000369 C3                           ret

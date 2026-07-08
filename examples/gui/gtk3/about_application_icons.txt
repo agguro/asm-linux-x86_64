@@ -1,0 +1,53 @@
+===============================================================================
+APPLICATION ICON - DESKTOP INTEGRATION NOTES
+===============================================================================
+
+Modern Linux desktop environments (such as KDE Plasma / Wayland on Kubuntu)
+ignore runtime window icons set directly via binary code (X11 pixbufs).
+To display the application icon in the taskbar and launcher, a .desktop 
+file mapping the Window Manager Class (WM_CLASS) is strictly required.
+
+This implementation uses 'gtk_window_set_wmclass' with the class ID:
+  -> applicationicon
+
+-------------------------------------------------------------------------------
+1. TEMPORARY MANUAL INTEGRATION (Testing Phase)
+-------------------------------------------------------------------------------
+
+To dynamically generate the launcher file with your current user path, 
+copy and paste the following command directly into your terminal:
+
+cat << EOF > ~/.local/share/applications/applicationicon.desktop
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=ASM Application Icon
+Comment=Bare-metal Assembly GTK3 Window
+Exec=/home/$USER/Projects/nasm-linux-archive/build/release/examples/gui/gtk/applicationicon/applicationicon
+Icon=/home/$USER/Projects/nasm-linux-archive/examples/gui/gtk/applicationicon/resources/pictures/logo.png
+Terminal=false
+StartupNotify=true
+StartupWMClass=applicationicon
+Categories=Development;
+EOF
+
+Make sure to mark the launcher as executable:
+  $ chmod +x ~/.local/share/applications/applicationicon.desktop
+
+-------------------------------------------------------------------------------
+2. DEBIAN PACKAGING ROADMAP (.deb Deployment)
+-------------------------------------------------------------------------------
+
+When packaging this archive into a production-ready .deb package later, 
+the automation will handle integration natively:
+
+  - Binary target path: /usr/bin/applicationicon
+  - Icon asset path:   /usr/share/icons/hicolor/256x256/apps/applicationicon.png
+  - System launcher:   /usr/share/applications/applicationicon.desktop
+
+Inside the system launcher, the keys will be hardcoded to the system paths:
+  Exec=applicationicon
+  Icon=applicationicon
+  StartupWMClass=applicationicon
+
+===============================================================================

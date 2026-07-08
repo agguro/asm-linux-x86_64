@@ -1,0 +1,212 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : gtkcombobox.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : GtkComboBoxText example displaying selected text inside a label
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .bss
+    21 00000000 ????????????????             target_label:     resq      1
+    22 00000008 ????????????????             allocated_str:    resq      1
+    23                                  
+    24                                  section .data
+    25 00000000 <bin 18C3h>                  logo:             incbin    "../resources/pictures/logo.png"
+    26                                       logo_size:        equ       $ - logo
+    27                                  
+    28                                       window:
+    29 000018C3 0000000000000000             .handle:          dq        0
+    30 000018CB 47746B436F6D626F42-          .title:           db        "GtkComboBox", 0
+    30 000018D4 6F7800             
+    31                                  
+    32                                       signal:
+    33 000018D7 64657374726F7900             .destroy:         db        "destroy", 0
+    34 000018DF 6368616E67656400             .changed:         db        "changed", 0
+    35                                  
+    36                                       combobox:
+    37 000018E7 0000000000000000             .handle:          dq        0
+    38 000018EF 5562756E747500               .txt1:            db        "Ubuntu", 0
+    39 000018F6 4D616E647269766100           .txt2:            db        "Mandriva", 0
+    40 000018FF 4665646F726100               .txt3:            db        "Fedora", 0
+    41 00001906 4D696E7400                   .txt4:            db        "Mint", 0
+    42 0000190B 47656E746F6F00               .txt5:            db        "Gentoo", 0
+    43 00001912 44656269616E00               .txt6:            db        "Debian", 0
+    44                                  
+    45                                       label:
+    46 00001919 0000000000000000             .handle:          dq        0
+    47 00001921 6865726520636F6D65-          .caption:         db        "here comes your choice", 0
+    47 0000192A 7320796F7572206368-
+    47 00001933 6F69636500         
+    48                                  
+    49                                       fixed:
+    50 00001938 0000000000000000             .handle:          dq        0
+    51                                       
+    52 00001940 0000000000000000             loader:           dq        0
+    53 00001948 0000000000000000             pixbuffer:        dq        0
+    54                                  
+    55                                  section .text
+    56                                       global _start
+    57                                  
+    58                                  _start:
+    59                                       ; 1. Stack Alignment conform System V AMD64 ABI
+    60 00000000 488B3C24                     mov        rdi, [rsp]                ; argc
+    61 00000004 488D742408                   lea        rsi, [rsp + 8]            ; argv
+    62 00000009 4989FC                       mov        r12, rdi
+    63 0000000C 4989F5                       mov        r13, rsi
+    64                                  
+    65 0000000F 4883E4F0                     and        rsp, -16
+    66 00000013 4883EC10                     sub        rsp, 16
+    67 00000017 488D3C24                     lea        rdi, [rsp]
+    68 0000001B 4C8927                       mov        [rdi], r12
+    69 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    70 00000023 4C892E                       mov        [rsi], r13
+    71                                  
+    72 00000026 E8(00000000)                 call       gtk_init
+    73                                  
+    74                                       ; 2. Generate Pixbuf from Embedded Asset in RAM
+    75 0000002B E8(00000000)                 call       gdk_pixbuf_loader_new
+    76 00000030 48890425[40190000]           mov        qword [loader], rax
+    77                                  
+    78 00000038 488B3C25[40190000]           mov        rdi, qword [loader]
+    79 00000040 48BE-                        mov        rsi, logo
+    79 00000042 [0000000000000000] 
+    80 0000004A BAC3180000                   mov        edx, logo_size
+    81 0000004F 4831C9                       xor        rcx, rcx
+    82 00000052 E8(00000000)                 call       gdk_pixbuf_loader_write
+    83                                  
+    84 00000057 488B3C25[40190000]           mov        rdi, qword [loader]
+    85 0000005F E8(00000000)                 call       gdk_pixbuf_loader_get_pixbuf
+    86 00000064 48890425[48190000]           mov        qword [pixbuffer], rax
+    87                                  
+    88                                       ; 3. Build and Configure Window Layout
+    89 0000006C BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    90 00000071 E8(00000000)                 call       gtk_window_new
+    91 00000076 48890425[C3180000]           mov        qword [window.handle], rax
+    92                                  
+    93 0000007E 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    94 00000086 48BE-                        mov        rsi, window.title
+    94 00000088 [CB18000000000000] 
+    95 00000090 E8(00000000)                 call       gtk_window_set_title
+    96                                  
+    97 00000095 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    98 0000009D BEF4010000                   mov        rsi, 500
+    99 000000A2 BA2C010000                   mov        rdx, 300
+   100 000000A7 E8(00000000)                 call       gtk_window_set_default_size
+   101                                  
+   102 000000AC 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   103 000000B4 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+   104 000000B9 E8(00000000)                 call       gtk_window_set_position
+   105                                  
+   106 000000BE 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   107 000000C6 488B3425[48190000]           mov        rsi, qword [pixbuffer]
+   108 000000CE E8(00000000)                 call       gtk_window_set_icon
+   109                                  
+   110                                       ; Connect Window Destroy Signal
+   111 000000D3 4531C9                       xor        r9d, r9d
+   112 000000D6 4531C0                       xor        r8d, r8d
+   113 000000D9 4831C9                       xor        rcx, rcx
+   114 000000DC 48BA-                        mov        rdx, gtk_main_quit
+   114 000000DE [0000000000000000] 
+   115 000000E6 48BE-                        mov        rsi, signal.destroy
+   115 000000E8 [D718000000000000] 
+   116 000000F0 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   117 000000F8 E8(00000000)                 call       g_signal_connect_data
+   118                                  
+   119                                       ; Create Fixed Container Layout
+   120 000000FD E8(00000000)                 call       gtk_fixed_new
+   121 00000102 48890425[38190000]           mov        qword [fixed.handle], rax
+   122                                  
+   123                                       ; Create ComboBoxText Component
+   124 0000010A E8(00000000)                 call       gtk_combo_box_text_new
+   125 0000010F 48890425[E7180000]           mov        qword [combobox.handle], rax
+   126                                  
+   127                                       ; Populate Rows
+   128 00000117 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   129 0000011F 48BE-                        mov        rsi, combobox.txt1
+   129 00000121 [EF18000000000000] 
+   130 00000129 E8(00000000)                 call       gtk_combo_box_text_append_text
+   131 0000012E 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   132 00000136 48BE-                        mov        rsi, combobox.txt2
+   132 00000138 [F618000000000000] 
+   133 00000140 E8(00000000)                 call       gtk_combo_box_text_append_text
+   134 00000145 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   135 0000014D 48BE-                        mov        rsi, combobox.txt3
+   135 0000014F [FF18000000000000] 
+   136 00000157 E8(00000000)                 call       gtk_combo_box_text_append_text
+   137 0000015C 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   138 00000164 48BE-                        mov        rsi, combobox.txt4
+   138 00000166 [0619000000000000] 
+   139 0000016E E8(00000000)                 call       gtk_combo_box_text_append_text
+   140 00000173 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   141 0000017B 48BE-                        mov        rsi, combobox.txt5
+   141 0000017D [0B19000000000000] 
+   142 00000185 E8(00000000)                 call       gtk_combo_box_text_append_text
+   143 0000018A 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   144 00000192 48BE-                        mov        rsi, combobox.txt6
+   144 00000194 [1219000000000000] 
+   145 0000019C E8(00000000)                 call       gtk_combo_box_text_append_text
+   146                                  
+   147                                       ; Pack Components
+   148 000001A1 488B3C25[38190000]           mov        rdi, qword [fixed.handle]
+   149 000001A9 488B3425[E7180000]           mov        rsi, qword [combobox.handle]
+   150 000001B1 BA32000000                   mov        rdx, 50
+   151 000001B6 B932000000                   mov        rcx, 50
+   152 000001BB E8(00000000)                 call       gtk_fixed_put
+   153                                  
+   154 000001C0 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   155 000001C8 488B3425[38190000]           mov        rsi, qword [fixed.handle]
+   156 000001D0 E8(00000000)                 call       gtk_container_add
+   157                                  
+   158 000001D5 48BF-                        mov        rdi, label.caption
+   158 000001D7 [2119000000000000] 
+   159 000001DF E8(00000000)                 call       gtk_label_new
+   160 000001E4 48890425[19190000]           mov        qword [label.handle], rax
+   161                                  
+   162 000001EC 488B3C25[38190000]           mov        rdi, qword [fixed.handle]
+   163 000001F4 488B3425[19190000]           mov        rsi, qword [label.handle]
+   164 000001FC BA32000000                   mov        rdx, 50
+   165 00000201 B96E000000                   mov        rcx, 110
+   166 00000206 E8(00000000)                 call       gtk_fixed_put
+   167                                  
+   168                                       ; Connect Changed Signal
+   169 0000020B 4531C9                       xor        r9d, r9d
+   170 0000020E 4531C0                       xor        r8d, r8d
+   171 00000211 488B0C25[19190000]           mov        rcx, qword [label.handle]
+   172 00000219 48BA-                        mov        rdx, combo_select
+   172 0000021B [5402000000000000] 
+   173 00000223 48BE-                        mov        rsi, signal.changed
+   173 00000225 [DF18000000000000] 
+   174 0000022D 488B3C25[E7180000]           mov        rdi, qword [combobox.handle]
+   175 00000235 E8(00000000)                 call       g_signal_connect_data
+   176                                  
+   177 0000023A 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   178 00000242 E8(00000000)                 call       gtk_widget_show_all
+   179 00000247 E8(00000000)                 call       gtk_main
+   180                                  
+   181 0000024C 4831FF                       xor        rdi, rdi
+   182 0000024F E8(00000000)                 call       exit
+   183                                  
+   184                                  ; -------------------------------------------------------------------------
+   185                                  ; Callback: combo_select
+   186                                  ; -------------------------------------------------------------------------
+   187                                  combo_select:
+   188 00000254 55                           push       rbp
+   189 00000255 4889E5                       mov        rbp, rsp
+   190 00000258 4883E4F0                     and        rsp, -16
+   191                                  
+   192 0000025C 48893425[00000000]           mov        qword [target_label], rsi
+   193 00000264 E8(00000000)                 call       gtk_combo_box_text_get_active_text
+   194 00000269 48890425[08000000]           mov        qword [allocated_str], rax
+   195                                  
+   196 00000271 488B3C25[00000000]           mov        rdi, qword [target_label]
+   197 00000279 488B3425[08000000]           mov        rsi, qword [allocated_str]
+   198 00000281 E8(00000000)                 call       gtk_label_set_text
+   199                                  
+   200 00000286 488B3C25[08000000]           mov        rdi, qword [allocated_str]
+   201 0000028E E8(00000000)                 call       g_free
+   202                                  
+   203 00000293 C9                           leave
+   204 00000294 C3                           ret

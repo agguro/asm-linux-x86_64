@@ -1,0 +1,161 @@
+GAS LISTING utils/math/signed_rotate.s 			page 1
+
+
+   1              	/* **************************************************************************
+   2              	 * Name         : signed_rotate.s
+   3              	 * Assemble     : as --64 signed_rotate.s -o signed_rotate.o
+   4              	 * Description  : Specialized circular rotation for arbitrary bit-windows.
+   5              	 *
+   6              	 * API          : srol(value, len, count), sror(value, len, count)
+   7              	 * Input        : %rdi = Value, %rsi = Bitlength (L), %rdx = Count (N)
+   8              	 * Output       : %rax = Rotated Result
+   9              	 *
+  10              	 * Strategy:
+  11              	 * This library implements "Signed" rotation where the Most Significant Bit 
+  12              	 * (MSB) of the defined length remains fixed as a "Sign Bit." The remaining 
+  13              	 * (L-1) bits are rotated. It includes a "Shortest Path" optimization: 
+  14              	 * if rotating 10 times in a 12-bit window, it will automatically perform 
+  15              	 * 2 rotations in the opposite direction for maximum efficiency.
+  16              	 * ************************************************************************** */
+  17              	
+  18              	.section .text
+  19              	
+  20              	.globl srol
+  21              	.type srol, @function
+  22              	srol:
+  23 0000 4531D2   	    xorl    %r10d, %r10d            # Direction 0 = Left
+  24 0003 EB08     	    jmp     _rotate_sig_backend
+  25              	
+  26              	.globl sror
+  27              	.type sror, @function
+  28              	sror:
+  29 0005 41BA0100 	    movl    $1, %r10d               # Direction 1 = Right
+  29      0000
+  30 000b EB00     	    jmp     _rotate_sig_backend
+  31              	
+  32              	.type _rotate_sig_backend, @function
+  33              	_rotate_sig_backend:
+  34 000d 55       	    pushq   %rbp
+  35 000e 4889E5   	    movq    %rsp, %rbp
+  36 0011 53       	    pushq   %rbx
+  37 0012 4154     	    pushq   %r12
+  38 0014 4155     	    pushq   %r13
+  39              	
+  40              	    # 1. Window Width (W = L - 1)
+  41 0016 4883FE02 	    cmpq    $2, %rsi
+  42 001a 0F8C9E00 	    jl      .Ldone_exit
+  42      0000
+  43 0020 4989F0   	    movq    %rsi, %r8
+  44 0023 49FFC8   	    decq    %r8                     # %r8 = W (Data bits excluding sign)
+  45              	
+  46              	    # 2. Normalize Count (N % W)
+  47 0026 4889D0   	    movq    %rdx, %rax              # Move Count to rax for division
+  48 0029 4D89D4   	    movq    %r10, %r12              # Save direction in r12
+  49 002c 4831D2   	    xorq    %rdx, %rdx              # Clear rdx for divq
+  50 002f 49F7F0   	    divq    %r8                     # rax = quotient, rdx = remainder
+  51              	    
+  52 0032 4889D3   	    movq    %rdx, %rbx              # %rbx = Normalized Count
+  53 0035 4885DB   	    testq   %rbx, %rbx
+  54 0038 0F848000 	    jz      .Ldone_exit             # If count is 0, exit early
+  54      0000
+GAS LISTING utils/math/signed_rotate.s 			page 2
+
+
+  55              	
+  56              	    # 3. Shortest Path Optimization
+  57 003e 4C89C0   	    movq    %r8, %rax
+  58 0041 48D1E8   	    shrq    $1, %rax                # rax = W / 2
+  59 0044 4839C3   	    cmpq    %rax, %rbx
+  60 0047 7610     	    jbe     .Lprepare_masks         # If count <= W/2, proceed normally
+  61              	
+  62              	    # Flip Logic: N_new = W - N_old
+  63 0049 4929D8   	    subq    %rbx, %r8
+  64 004c 4C89C3   	    movq    %r8, %rbx               # rbx = Flipped Count
+  65 004f 4983F401 	    xorq    $1, %r12                # Flip Direction Flag
+  66              	    
+  67              	    # Restore W in %r8
+  68 0053 4989F0   	    movq    %rsi, %r8
+  69 0056 49FFC8   	    decq    %r8
+  70              	
+  71              	
+  72              	
+  73              	.Lprepare_masks:
+  74              	    # 4. Create Isolation Masks
+  75 0059 48C7C101 	    movq    $1, %rcx
+  75      000000
+  76 0060 4488C1   	    movb    %r8b, %cl               # cl = W
+  77 0063 48D3E1   	    shlq    %cl, %rcx               # rcx = 1 << W
+  78 0066 4989C9   	    movq    %rcx, %r9               # r9 = Sign Bit Mask
+  79              	    
+  80 0069 48FFC9   	    decq    %rcx                    # rcx = (1 << W) - 1
+  81 006c 4989CD   	    movq    %rcx, %r13              # r13 = Body Mask
+  82              	
+  83              	    # 5. Isolate Components
+  84 006f 4889F8   	    movq    %rdi, %rax
+  85 0072 4C21E8   	    andq    %r13, %rax              # %rax = The Body (bits to rotate)
+  86              	    
+  87 0075 4989FB   	    movq    %rdi, %r11
+  88 0078 4D21CB   	    andq    %r9, %r11               # %r11 = The Fixed Sign Bit
+  89              	
+  90              	    # 6. Directional Trigger
+  91 007b 49D1EC   	    shrq    $1, %r12
+  92 007e 7220     	    jc      .Lright_loop
+  93              	
+  94              	# --- Left Bridge (Rotation within window r8) ---
+  95              	.Lleft_loop:
+  96 0080 4989C2   	    movq    %rax, %r10              # Copy body
+  97 0083 4C89C1   	    movq    %r8, %rcx
+  98 0086 48FFC9   	    decq    %rcx                    # rcx = W - 1
+  99 0089 49D3EA   	    shrq    %cl, %r10               # r10 Bit 0 = MSB of window
+ 100              	    
+ 101 008c 48D1E0   	    shlq    $1, %rax                # Shift Left
+ 102 008f 4C21E8   	    andq    %r13, %rax              # Mask to window size
+ 103              	    
+ 104 0092 4983E201 	    andq    $1, %r10                # Isolate the bit to wrap
+ 105 0096 4C09D0   	    orq     %r10, %rax              # Wrap MSB -> LSB
+ 106              	    
+ 107 0099 48FFCB   	    decq    %rbx
+ 108 009c 75E2     	    jnz     .Lleft_loop
+ 109 009e EB1B     	    jmp     .Lfinalize
+ 110              	
+GAS LISTING utils/math/signed_rotate.s 			page 3
+
+
+ 111              	# --- Right Bridge ---
+ 112              	.Lright_loop:
+ 113 00a0 4989C2   	    movq    %rax, %r10
+ 114 00a3 4983E201 	    andq    $1, %r10                # r10 Bit 0 = LSB
+ 115              	    
+ 116 00a7 48D1E8   	    shrq    $1, %rax                # Shift Right
+ 117              	    
+ 118 00aa 4C89C1   	    movq    %r8, %rcx
+ 119 00ad 48FFC9   	    decq    %rcx
+ 120 00b0 49D3E2   	    shlq    %cl, %r10               # Move LSB -> MSB of window position
+ 121              	    
+ 122 00b3 4C09D0   	    orq     %r10, %rax              # Wrap LSB -> MSB
+ 123              	    
+ 124 00b6 48FFCB   	    decq    %rbx
+ 125 00b9 75E5     	    jnz     .Lright_loop
+ 126              	
+ 127              	.Lfinalize:
+ 128 00bb 4C09D8   	    orq     %r11, %rax              # Re-attach the fixed Sign bit
+ 129              	
+ 130              	.Ldone_exit:
+ 131 00be 415D     	    popq    %r13
+ 132 00c0 415C     	    popq    %r12
+ 133 00c2 5B       	    popq    %rbx
+ 134 00c3 5D       	    popq    %rbp
+ 135 00c4 C3       	    ret
+ 136              	
+ 137              	.size srol, .-srol
+ 138              	.size sror, .-sror
+ 139              	.section .note.GNU-stack,"",@progbits
+GAS LISTING utils/math/signed_rotate.s 			page 4
+
+
+DEFINED SYMBOLS
+utils/math/signed_rotate.s:22     .text:0000000000000000 srol
+utils/math/signed_rotate.s:33     .text:000000000000000d _rotate_sig_backend
+utils/math/signed_rotate.s:28     .text:0000000000000005 sror
+
+NO UNDEFINED SYMBOLS

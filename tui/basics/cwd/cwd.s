@@ -4,27 +4,6 @@
  * Description   : Linux alternative for pwd (GNU Style - No Dependencies).
  * Uses brk for dynamic buffer allocation to handle paths of 
  * arbitrary length.
- *
- * Build Sequence:
- * 1. Assemble Project Main:
- * /usr/bin/as --64 -g --noexecstack -I ../../../include \
- * -al=cwd.lst cwd.s -o cwd.o
- *
- * 2. Assemble Library Dependencies:
- * /usr/bin/as --64 -g --noexecstack -I ../../../include \
- * -al=strlen.lst ../../../lib/strlen.s -o strlen.o
- *
- * 3. Link Executable (PIE enabled):
- * /usr/bin/ld -m elf_x86_64 -pie -z noexecstack \
- * --dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cwd \
- * cwd.o strlen.o
- *
- * Strategy:
- * 1. Determine the initial program break (heap start) using sys_brk(0).
- * 2. Iteratively grow the heap in 64-byte increments.
- * 3. Call sys_getcwd. If it returns -ERANGE (-34), grow the heap again.
- * 4. Once successful, use an external strlen to find the path length.
- * 5. Output the path and a newline to stdout using sys_write.
  * **************************************************************************
  */
 

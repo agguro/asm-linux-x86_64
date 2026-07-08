@@ -1,0 +1,173 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : gtkmarkuplabel.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : GtkLabel example demonstrating Pango markup text styling
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .data
+    21 00000000 <bin 18C3h>                  logo:             incbin    "../resources/pictures/logo.png"
+    22                                       logo_size:        equ       $ - logo
+    23                                  
+    24                                       window:
+    25 000018C3 0000000000000000             .handle:          dq        0
+    26 000018CB 47746B4D61726B7570-          .title:           db        "GtkMarkupLabel", 0
+    26 000018D4 4C6162656C00       
+    27                                  
+    28                                       signal:
+    29 000018DA 64657374726F7900             .destroy:         db        "destroy", 0
+    30                                  
+    31                                       label:
+    32 000018E2 0000000000000000             .handle:          dq        0
+    33 000018EA 436F6C642077617320-          .caption:         db        "Cold was my soul", 10, "Untold was the pain", 10 , "I faced when you left me", 10, "A rose in the rain....", 10
+    33 000018F3 6D7920736F756C0A55-
+    33 000018FC 6E746F6C6420776173-
+    33 00001905 20746865207061696E-
+    33 0000190E 0A4920666163656420-
+    33 00001917 7768656E20796F7520-
+    33 00001920 6C656674206D650A41-
+    33 00001929 20726F736520696E20-
+    33 00001932 746865207261696E2E-
+    33 0000193B 2E2E2E0A           
+    34 0000193F 536F20492073776F72-                            db        "So I swore to the razor", 10, "That never, enchained", 10, "Would your dark nails of faith", 10, "<i>Be pushed through my veins again</i>", 10, 10
+    34 00001948 6520746F2074686520-
+    34 00001951 72617A6F720A546861-
+    34 0000195A 74206E657665722C20-
+    34 00001963 656E636861696E6564-
+    34 0000196C 0A576F756C6420796F-
+    34 00001975 7572206461726B206E-
+    34 0000197E 61696C73206F662066-
+    34 00001987 616974680A3C693E42-
+    34 00001990 652070757368656420-
+    34 00001999 7468726F756768206D-
+    34 000019A2 79207665696E732061-
+    34 000019AB 6761696E3C2F693E0A-
+    34 000019B4 0A                 
+    35 000019B5 4261726564206F6E20-                            db        "Bared on your tomb", 10, "<b>I&#39;m a prayer for your loneliness</b>", 10, "And would you ever soon", 10, "Come above onto me?", 10, "<u>For once upon a time</u>", 10
+    35 000019BE 796F757220746F6D62-
+    35 000019C7 0A3C623E4926233339-
+    35 000019D0 3B6D20612070726179-
+    35 000019D9 657220666F7220796F-
+    35 000019E2 7572206C6F6E656C69-
+    35 000019EB 6E6573733C2F623E0A-
+    35 000019F4 416E6420776F756C64-
+    35 000019FD 20796F752065766572-
+    35 00001A06 20736F6F6E0A436F6D-
+    35 00001A0F 652061626F7665206F-
+    35 00001A18 6E746F206D653F0A3C-
+    35 00001A21 753E466F72206F6E63-
+    35 00001A2A 652075706F6E206120-
+    35 00001A33 74696D653C2F753E0A 
+    36 00001A3C 4F6E20746865206269-                            db        "On the binds of your lowliness", 10, "<b><i><u>I could always find the slot for your sacred key</u></i></b>", 0
+    36 00001A45 6E6473206F6620796F-
+    36 00001A4E 7572206C6F776C696E-
+    36 00001A57 6573730A3C623E3C69-
+    36 00001A60 3E3C753E4920636F75-
+    36 00001A69 6C6420616C77617973-
+    36 00001A72 2066696E6420746865-
+    36 00001A7B 20736C6F7420666F72-
+    36 00001A84 20796F757220736163-
+    36 00001A8D 726564206B65793C2F-
+    36 00001A96 753E3C2F693E3C2F62-
+    36 00001A9F 3E00               
+    37                                  
+    38 00001AA1 0000000000000000             loader:           dq        0
+    39 00001AA9 0000000000000000             pixbuffer:        dq        0
+    40                                  
+    41                                  section .text
+    42                                       global _start
+    43                                  
+    44                                  _start:
+    45                                       ; 1. Stack Alignment conform System V AMD64 ABI
+    46 00000000 488B3C24                     mov        rdi, [rsp]                ; argc
+    47 00000004 488D742408                   lea        rsi, [rsp + 8]            ; argv
+    48 00000009 4989FC                       mov        r12, rdi
+    49 0000000C 4989F5                       mov        r13, rsi
+    50                                  
+    51 0000000F 4883E4F0                     and        rsp, -16
+    52 00000013 4883EC10                     sub        rsp, 16
+    53 00000017 488D3C24                     lea        rdi, [rsp]
+    54 0000001B 4C8927                       mov        [rdi], r12
+    55 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    56 00000023 4C892E                       mov        [rsi], r13
+    57                                  
+    58 00000026 E8(00000000)                 call       gtk_init
+    59                                  
+    60                                       ; 2. Generate Pixbuf from Embedded Asset
+    61 0000002B E8(00000000)                 call       gdk_pixbuf_loader_new
+    62 00000030 48890425[A11A0000]           mov        qword [loader], rax
+    63                                  
+    64 00000038 488B3C25[A11A0000]           mov        rdi, qword [loader]
+    65 00000040 48BE-                        mov        rsi, logo
+    65 00000042 [0000000000000000] 
+    66 0000004A BAC3180000                   mov        edx, logo_size
+    67 0000004F 4831C9                       xor        rcx, rcx
+    68 00000052 E8(00000000)                 call       gdk_pixbuf_loader_write
+    69                                  
+    70 00000057 488B3C25[A11A0000]           mov        rdi, qword [loader]
+    71 0000005F E8(00000000)                 call       gdk_pixbuf_loader_get_pixbuf
+    72 00000064 48890425[A91A0000]           mov        qword [pixbuffer], rax
+    73                                  
+    74                                       ; 3. Build Window
+    75 0000006C BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    76 00000071 E8(00000000)                 call       gtk_window_new
+    77 00000076 48890425[C3180000]           mov        qword [window.handle], rax
+    78                                  
+    79 0000007E 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    80 00000086 48BE-                        mov        rsi, window.title
+    80 00000088 [CB18000000000000] 
+    81 00000090 E8(00000000)                 call       gtk_window_set_title
+    82                                  
+    83 00000095 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    84 0000009D BEF4010000                   mov        rsi, 500
+    85 000000A2 BA2C010000                   mov        rdx, 300
+    86 000000A7 E8(00000000)                 call       gtk_window_set_default_size
+    87                                  
+    88 000000AC 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    89 000000B4 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+    90 000000B9 E8(00000000)                 call       gtk_window_set_position
+    91                                  
+    92 000000BE 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    93 000000C6 488B3425[A91A0000]           mov        rsi, qword [pixbuffer]
+    94 000000CE E8(00000000)                 call       gtk_window_set_icon
+    95                                  
+    96                                       ; Connect Window Destroy Signal
+    97 000000D3 4531C9                       xor        r9d, r9d
+    98 000000D6 4531C0                       xor        r8d, r8d
+    99 000000D9 488B0C25[C3180000]           mov        rcx, qword [window.handle]
+   100 000000E1 48BA-                        mov        rdx, gtk_main_quit
+   100 000000E3 [0000000000000000] 
+   101 000000EB 48BE-                        mov        rsi, signal.destroy
+   101 000000ED [DA18000000000000] 
+   102 000000F5 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   103 000000FD E8(00000000)                 call       g_signal_connect_data
+   104                                  
+   105                                       ; 4. Instantiate and Configure Markup Label
+   106 00000102 4831FF                       xor        rdi, rdi                  ; NULL
+   107 00000105 E8(00000000)                 call       gtk_label_new
+   108 0000010A 48890425[E2180000]           mov        qword [label.handle], rax
+   109                                  
+   110 00000112 488B3C25[E2180000]           mov        rdi, qword [label.handle]
+   111 0000011A 48BE-                        mov        rsi, label.caption
+   111 0000011C [EA18000000000000] 
+   112 00000124 E8(00000000)                 call       gtk_label_set_markup
+   113                                  
+   114 00000129 488B3C25[E2180000]           mov        rdi, qword [label.handle]
+   115 00000131 BE02000000                   mov        rsi, 2                    ; GTK_JUSTIFY_CENTER
+   116 00000136 E8(00000000)                 call       gtk_label_set_justify
+   117                                  
+   118 0000013B 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   119 00000143 488B3425[E2180000]           mov        rsi, qword [label.handle]
+   120 0000014B E8(00000000)                 call       gtk_container_add
+   121                                  
+   122                                       ; 5. Execution Loop
+   123 00000150 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   124 00000158 E8(00000000)                 call       gtk_widget_show_all
+   125 0000015D E8(00000000)                 call       gtk_main
+   126                                  
+   127 00000162 4831FF                       xor        rdi, rdi
+   128 00000165 E8(00000000)                 call       exit

@@ -1,0 +1,212 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : entersignal.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : Onenter and onleave signals and events example via CSS injection
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  struc GdkRGBA
+    21 00000000 ????????????????             .red:     resq      1
+    22 00000008 ????????????????             .green:   resq      1
+    23 00000010 ????????????????             .blue:    resq      1
+    24 00000018 ????????????????             .alpha:   resq      1
+    25                                  endstruc
+    26                                  
+    27                                  section .data
+    28                                       color:    istruc GdkRGBA
+    29 00000000 000000000000F03F                  at GdkRGBA.red,       dq   1.0
+    30 00000008 0000000000000000                  at GdkRGBA.green,     dq   0.0
+    31 00000010 0000000000000000                  at GdkRGBA.blue,      dq   0.0
+    32 00000018 000000000000F03F                  at GdkRGBA.alpha,     dq   1.0
+    33                                       iend
+    34                                  
+    35                                       window:
+    36 00000020 0000000000000000             .handle:       dq   0
+    37 00000028 656E74657220736967-          .title:        db   "enter signal", 0
+    37 00000031 6E616C00           
+    38                                  
+    39                                       fixed:
+    40 00000035 0000000000000000             .handle:       dq   0
+    41                                  
+    42                                       button:
+    43 0000003D 0000000000000000             .handle:       dq   0
+    44 00000045 427574746F6E00               .label:        db   "Button", 0
+    45                                  
+    46                                       signal:
+    47 0000004C 656E7465722D6E6F74-          .enter:        db   "enter-notify-event", 0
+    47 00000055 6966792D6576656E74-
+    47 0000005E 00                 
+    48 0000005F 6C656176652D6E6F74-          .leave:        db   "leave-notify-event", 0
+    48 00000068 6966792D6576656E74-
+    48 00000071 00                 
+    49 00000072 64657374726F7900             .destroy:      db   "destroy", 0
+    50                                  
+    51                                       cssprovider:
+    52 0000007A 0000000000000000             .handle:       dq   0
+    53 00000082 47746B57696E646F77-          .cssred:       db   "GtkWindow {background-color: red;}"
+    53 0000008B 207B6261636B67726F-
+    53 00000094 756E642D636F6C6F72-
+    53 0000009D 3A207265643B7D     
+    54                                       .cssredsize:   equ  $ - cssprovider.cssred
+    55                                  
+    56                                       display:
+    57 000000A4 0000000000000000             .handle:       dq   0
+    58                                  
+    59                                       screen:
+    60 000000AC 0000000000000000             .handle:       dq   0
+    61                                  
+    62                                  section .text
+    63                                       global _start
+    64                                  
+    65                                  _start:
+    66                                       ; 1. Stack Alignment & GTK3 Init
+    67 00000000 488B3C24                     mov        rdi, [rsp]                ; argc
+    68 00000004 488D742408                   lea        rsi, [rsp + 8]            ; argv
+    69 00000009 4989FC                       mov        r12, rdi
+    70 0000000C 4989F5                       mov        r13, rsi
+    71                                  
+    72 0000000F 4883E4F0                     and        rsp, -16
+    73 00000013 4883EC10                     sub        rsp, 16
+    74 00000017 488D3C24                     lea        rdi, [rsp]
+    75 0000001B 4C8927                       mov        [rdi], r12
+    76 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    77 00000023 4C892E                       mov        [rsi], r13
+    78 00000026 E8(00000000)                 call       gtk_init
+    79                                  
+    80                                       ; 2. Global CSS Provider Initialization
+    81 0000002B E8(00000000)                 call       gtk_css_provider_new
+    82 00000030 48890425[7A000000]           mov        qword [cssprovider.handle], rax
+    83                                  
+    84 00000038 E8(00000000)                 call       gdk_display_get_default
+    85 0000003D 48890425[A4000000]           mov        qword [display.handle], rax
+    86                                  
+    87 00000045 488B3C25[A4000000]           mov        rdi, qword [display.handle]
+    88 0000004D E8(00000000)                 call       gdk_display_get_default_screen
+    89 00000052 48890425[AC000000]           mov        qword [screen.handle], rax
+    90                                  
+    91 0000005A B900000000                   mov        rcx, 0                    ; GError** = NULL
+    92 0000005F BA22000000                   mov        rdx, cssprovider.cssredsize
+    93 00000064 48BE-                        mov        rsi, cssprovider.cssred
+    93 00000066 [8200000000000000] 
+    94 0000006E 488B3C25[7A000000]           mov        rdi, qword [cssprovider.handle]
+    95 00000076 E8(00000000)                 call       gtk_css_provider_load_from_data
+    96                                  
+    97                                       ; 3. Build and Configure Window Layout
+    98 0000007B BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    99 00000080 E8(00000000)                 call       gtk_window_new
+   100 00000085 48890425[20000000]           mov        qword [window.handle], rax
+   101                                  
+   102 0000008D 488B3C25[20000000]           mov        rdi, qword [window.handle]
+   103 00000095 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+   104 0000009A E8(00000000)                 call       gtk_window_set_position
+   105                                  
+   106 0000009F 488B3C25[20000000]           mov        rdi, qword [window.handle]
+   107 000000A7 BEE6000000                   mov        rsi, 230
+   108 000000AC BA96000000                   mov        rdx, 150
+   109 000000B1 E8(00000000)                 call       gtk_window_set_default_size
+   110                                  
+   111 000000B6 488B3C25[20000000]           mov        rdi, qword [window.handle]
+   112 000000BE 48BE-                        mov        rsi, window.title
+   112 000000C0 [2800000000000000] 
+   113 000000C8 E8(00000000)                 call       gtk_window_set_title
+   114                                  
+   115 000000CD E8(00000000)                 call       gtk_fixed_new
+   116 000000D2 48890425[35000000]           mov        qword [fixed.handle], rax
+   117                                  
+   118 000000DA 488B3C25[20000000]           mov        rdi, qword [window.handle]
+   119 000000E2 488B3425[35000000]           mov        rsi, qword [fixed.handle]
+   120 000000EA E8(00000000)                 call       gtk_container_add
+   121                                  
+   122                                       ; Create Target Button
+   123 000000EF 48BF-                        mov        rdi, button.label
+   123 000000F1 [4500000000000000] 
+   124 000000F9 E8(00000000)                 call       gtk_button_new_with_label
+   125 000000FE 48890425[3D000000]           mov        qword [button.handle], rax
+   126                                  
+   127 00000106 488B3C25[3D000000]           mov        rdi, qword [button.handle]
+   128 0000010E BE50000000                   mov        rsi, 80
+   129 00000113 BA23000000                   mov        rdx, 35
+   130 00000118 E8(00000000)                 call       gtk_widget_set_size_request
+   131                                  
+   132 0000011D 488B3C25[35000000]           mov        rdi, qword [fixed.handle]
+   133 00000125 488B3425[3D000000]           mov        rsi, qword [button.handle]
+   134 0000012D BA32000000                   mov        rdx, 50
+   135 00000132 B932000000                   mov        rcx, 50
+   136 00000137 E8(00000000)                 call       gtk_fixed_put
+   137                                  
+   138                                       ; 4. Signal Connections & Main Loop
+   139 0000013C 4531C9                       xor        r9d, r9d
+   140 0000013F 4531C0                       xor        r8d, r8d
+   141 00000142 4831C9                       xor        rcx, rcx
+   142 00000145 48BA-                        mov        rdx, onenter
+   142 00000147 [D401000000000000] 
+   143 0000014F 48BE-                        mov        rsi, signal.enter
+   143 00000151 [4C00000000000000] 
+   144 00000159 488B3C25[3D000000]           mov        rdi, qword [button.handle]
+   145 00000161 E8(00000000)                 call       g_signal_connect_data
+   146                                  
+   147 00000166 4531C9                       xor        r9d, r9d
+   148 00000169 4531C0                       xor        r8d, r8d
+   149 0000016C 4831C9                       xor        rcx, rcx
+   150 0000016F 48BA-                        mov        rdx, onleave
+   150 00000171 [1102000000000000] 
+   151 00000179 48BE-                        mov        rsi, signal.leave
+   151 0000017B [5F00000000000000] 
+   152 00000183 488B3C25[3D000000]           mov        rdi, qword [button.handle]
+   153 0000018B E8(00000000)                 call       g_signal_connect_data
+   154                                  
+   155 00000190 4531C9                       xor        r9d, r9d
+   156 00000193 4531C0                       xor        r8d, r8d
+   157 00000196 4831C9                       xor        rcx, rcx
+   158 00000199 48BA-                        mov        rdx, gtk_main_quit
+   158 0000019B [0000000000000000] 
+   159 000001A3 48BE-                        mov        rsi, signal.destroy
+   159 000001A5 [7200000000000000] 
+   160 000001AD 488B3C25[20000000]           mov        rdi, qword [window.handle]
+   161 000001B5 E8(00000000)                 call       g_signal_connect_data
+   162                                  
+   163 000001BA 488B3C25[20000000]           mov        rdi, qword [window.handle]
+   164 000001C2 E8(00000000)                 call       gtk_widget_show_all
+   165 000001C7 E8(00000000)                 call       gtk_main
+   166                                  
+   167                                  .L_exit:
+   168 000001CC 4831FF                       xor        rdi, rdi
+   169 000001CF E8(00000000)                 call       exit
+   170                                  
+   171                                  ; Callback: onenter
+   172                                  onenter:
+   173 000001D4 55                           push       rbp
+   174 000001D5 4889E5                       mov        rbp, rsp
+   175 000001D8 4883E4F0                     and        rsp, -16
+   176                                  
+   177 000001DC 48BA-                        mov        rdx, color
+   177 000001DE [0000000000000000] 
+   178 000001E6 BE02000000                   mov        rsi, GTK_STATE_FLAG_PRELIGHT
+   179 000001EB E8(00000000)                 call       gtk_widget_override_color
+   180                                  
+   181 000001F0 BA20030000                   mov        rdx, GTK_STYLE_PROVIDER_PRIORITY_USER
+   182 000001F5 488B3425[7A000000]           mov        rsi, qword [cssprovider.handle]
+   183 000001FD 488B3C25[AC000000]           mov        rdi, qword [screen.handle]
+   184 00000205 E8(00000000)                 call       gtk_style_context_add_provider_for_screen
+   185                                  
+   186 0000020A B800000000                   mov        rax, FALSE
+   187 0000020F C9                           leave
+   188 00000210 C3                           ret
+   189                                  
+   190                                  ; Callback: onleave
+   191                                  onleave:
+   192 00000211 55                           push       rbp
+   193 00000212 4889E5                       mov        rbp, rsp
+   194 00000215 4883E4F0                     and        rsp, -16
+   195                                  
+   196 00000219 488B3C25[AC000000]           mov        rdi, qword [screen.handle]
+   197 00000221 488B3425[7A000000]           mov        rsi, qword [cssprovider.handle]
+   198 00000229 E8(00000000)                 call       gtk_style_context_remove_provider_for_screen
+   199                                  
+   200 0000022E B800000000                   mov        rax, FALSE
+   201 00000233 C9                           leave
+   202 00000234 C3                           ret

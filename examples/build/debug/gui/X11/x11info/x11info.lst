@@ -1,0 +1,133 @@
+     1                                  ;name: x11info.asm
+     2                                  ;
+     3                                  ;build: nasm -felf64 x11info.asm -o x11info.o
+     4                                  ;       ld -melf_x86_64 -o x11info x11info.o -lc --dynamic-linker /lib64/ld-linux-x86-64.so.2 -lX11
+     5                                  ;
+     6                                  ;description: This is a first attempt to get X11 and nasm to work.
+     7                                  ;             This program is taken from a c source file from Brian Hammond 2/9/96.
+     8                                  ;             connect.c and rebuild to nasm, just because I like it.
+     9                                  
+    10                                  bits 64
+    11                                  
+    12                                  [list -]
+    15                                  
+    16                                  ; external functions from X11 library
+    17                                      extern XOpenDisplay
+    18                                      extern XDisplayName
+    19                                      extern XCloseDisplay
+    20                                  ; external functions from stdio library
+    21                                      extern printf
+    22                                      extern exit
+    23                                      extern puts
+    24                                  
+    25                                  section .data
+    26                                  
+    27 00000000 0000000000000000            display_name: dq     0
+    28 00000008 00000000                    screen:       dd     0
+    29 0000000C 00000000                    depth:        dd     0
+    30 00000010 00000000                    connection:   dd     0
+    31 00000014 00000000                    width:        dd     0
+    32 00000018 00000000                    height:       dd     0
+    33 0000001C 54686520646973706C-         string1:      db "The display is %s",10, 0
+    33 00000025 61792069732025730A-
+    33 0000002E 00                 
+    34 0000002F 5769647468203A2025-         string2:      db "Width : %d",10, 0
+    34 00000038 640A00             
+    35 0000003B 486569676874203A20-         string6:      db "Height : %d", 10, 0
+    35 00000044 25640A00           
+    36 00000048 436F6E6E656374696F-         string3:      db "Connection number is %d", 10, 0
+    36 00000051 6E206E756D62657220-
+    36 0000005A 69732025640A00     
+    37 00000061 596F75206C69766520-         string4:      db "You live in prehistoric times",10, 0
+    37 0000006A 696E20707265686973-
+    37 00000073 746F7269632074696D-
+    37 0000007C 65730A00           
+    38 00000080 596F75206861766520-         string5:      db "You have got a coloured monitor with depth of %d",10, 0
+    38 00000089 676F74206120636F6C-
+    38 00000092 6F75726564206D6F6E-
+    38 0000009B 69746F722077697468-
+    38 000000A4 206465707468206F66-
+    38 000000AD 2025640A00         
+    39                                  
+    40                                  section .text
+    41                                  
+    42                                  global _start
+    43                                  _start:
+    44                                  
+    45 00000000 31FF                        xor     edi,edi
+    46 00000002 E8(00000000)                call    XOpenDisplay
+    47 00000007 48890425[00000000]          mov     qword[display_name],rax
+    48                                      ; display_name structure
+    49                                      ; screen = DefaultScreen(display_name);
+    50 0000000F 488B0425[00000000]          mov     rax,qword[display_name]
+    51 00000017 8B80E0000000                mov     eax,dword[rax+0xe0]
+    52 0000001D 890425[08000000]            mov     dword[screen],eax
+    53                                      ; depth = DefaultDepth(display_name,screen);
+    54 00000024 488B0425[00000000]          mov     rax,qword[display_name]
+    55 0000002C 488B80E8000000              mov     rax,qword[rax+0xe8]
+    56 00000033 8B1425[08000000]            mov     edx,dword[screen]
+    57 0000003A 4863D2                      movsxd  rdx,edx
+    58 0000003D 48C1E207                    shl     rdx,0x7
+    59 00000041 4801D0                      add     rax,rdx
+    60 00000044 8B4038                      mov     eax,dword[rax+0x38]
+    61 00000047 890425[0C000000]            mov     dword[depth],eax
+    62                                      ;connection = ConnectionNumber(display_name);
+    63 0000004E 488B0425[00000000]          mov     rax,qword[display_name]
+    64 00000056 8B4010                      mov     eax,dword[rax+0x10]
+    65 00000059 890425[10000000]            mov     dword[connection],eax                     ; rbp-0xc
+    66                                      ;printf("The display is::%s\n",XDisplayName((char*)display_name));
+    67 00000060 488B0425[00000000]          mov     rax,qword[display_name]
+    68 00000068 4889C7                      mov     rdi,rax
+    69 0000006B E8(00000000)                call    XDisplayName
+    70 00000070 4889C6                      mov     rsi,rax
+    71 00000073 BF[1C000000]                mov     edi,string1
+    72 00000078 31C0                        xor     eax,eax
+    73 0000007A E8(00000000)                call    printf
+    74 0000007F 488B0425[00000000]          mov     rax,qword[display_name]
+    75 00000087 488B80E8000000              mov     rax,qword[rax+0xe8]
+    76 0000008E 8B1425[08000000]            mov     edx,dword[screen]
+    77 00000095 4863D2                      movsxd  rdx,edx
+    78 00000098 48C1E207                    shl     rdx,0x7
+    79 0000009C 4801D0                      add     rax,rdx
+    80 0000009F 8B4018                      mov     eax,dword[rax+0x18]
+    81 000000A2 890425[14000000]            mov     dword[width],eax
+    82 000000A9 89C6                        mov     esi,eax
+    83 000000AB BF[2F000000]                mov     edi,string2
+    84 000000B0 31C0                        xor     eax,eax
+    85 000000B2 E8(00000000)                call    printf
+    86 000000B7 488B0425[00000000]          mov     rax,qword[display_name]
+    87 000000BF 488B80E8000000              mov     rax,qword[rax+0xe8]
+    88 000000C6 8B1425[08000000]            mov     edx,dword[screen]
+    89 000000CD 4863D2                      movsxd  rdx,edx
+    90 000000D0 48C1E207                    shl     rdx,0x7
+    91 000000D4 4801D0                      add     rax,rdx
+    92 000000D7 8B401C                      mov     eax,dword[rax+0x1c]
+    93 000000DA 890425[18000000]            mov     dword[height],eax
+    94 000000E1 89C6                        mov     esi,eax
+    95 000000E3 BF[3B000000]                mov     edi,string6
+    96 000000E8 31C0                        xor     eax,eax
+    97 000000EA E8(00000000)                call    printf
+    98 000000EF 8B0425[10000000]            mov     eax,dword[connection]
+    99 000000F6 89C6                        mov     esi,eax
+   100 000000F8 BF[48000000]                mov     edi,string3
+   101 000000FD 31C0                        xor     eax,eax
+   102 000000FF E8(00000000)                call    printf
+   103                                      ; if(depth == 1)
+   104 00000104 833C25[0C000000]01          cmp     dword[depth],0x1
+   105 0000010C 750C                        jne     showDepth
+   106                                      ; printf("You live in prehistoric times\n");
+   107 0000010E BF[61000000]                mov     edi,string4
+   108 00000113 E8(00000000)                call    puts
+   109 00000118 EB15                        jmp     closeDisplay
+   110                                      ;else printf("You've got a coloured monitor with depth of %d\n",
+   111                                  showDepth:
+   112 0000011A 8B0425[0C000000]            mov     eax,dword[depth]
+   113 00000121 89C6                        mov     esi,eax
+   114 00000123 BF[80000000]                mov     edi,string5
+   115 00000128 31C0                        xor     eax,eax
+   116 0000012A E8(00000000)                call    printf
+   117                                  closeDisplay:
+   118 0000012F 488B0425[00000000]          mov     rax,qword[display_name]
+   119 00000137 4889C7                      mov     rdi,rax
+   120 0000013A E8(00000000)                call    XCloseDisplay
+   121 0000013F E8(00000000)                call    exit

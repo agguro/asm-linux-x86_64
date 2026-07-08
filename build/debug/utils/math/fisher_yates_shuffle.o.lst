@@ -1,0 +1,70 @@
+GAS LISTING utils/math/fisher_yates_shuffle.s 			page 1
+
+
+   1              	/*
+   2              	 $**************************************************************************
+   3              	 * Name        : fisher_yates_shuffle.s
+   4              	 * Description : Performs an unbiased, linear-time (O(n)) shuffle of a buffer.
+   5              	 * Ensures every possible permutation of the deck is equally likely.
+   6              	 *
+   7              	 * ABI         : System V AMD64 (Linux)
+   8              	 * Input       : %rdi = Pointer to the buffer (e.g., deck of cards)
+   9              	 * %rsi = Number of elements in the buffer (N)
+  10              	 * Output      : None (Buffer is shuffled in-place)
+  11              	 *
+  12              	 * Strategy    : Uses the Knuth Shuffle logic: Iterates from the end of the 
+  13              	 * buffer to the front, swapping the current element 'i' with 
+  14              	 * a random element 'j' selected from the range [0, i]. 
+  15              	 * Uses the 'rdtsc' instruction for high-resolution entropy.
+  16              	 * **************************************************************************
+  17              	 */
+  18              	
+  19              	.section .text
+  20              	.globl fisher_yates_shuffle
+  21              	.type fisher_yates_shuffle, @function
+  22              	
+  23              	fisher_yates_shuffle:
+  24 0000 4885F6   	    testq   %rsi, %rsi              # Handle 0-length case
+  25 0003 7433     	    jz      .Ldone
+  26              	    
+  27              	    # Initialize buffer with 1..N
+  28 0005 4889F1   	    movq    %rsi, %rcx
+  29 0008 884C0FFF 	1:  movb    %cl, -1(%rdi, %rcx)
+  30 000c E2FA     	    loop    1b
+  31              	
+  32 000e 4989F0   	    movq    %rsi, %r8               # i = N
+  33              	.Lloop:
+  34 0011 49FFC8   	    decq    %r8                     # i-- (goes from N-1 down to 1)
+  35 0014 7422     	    jz      .Ldone
+  36              	
+  37              	    # Generate random j in range [0, i]
+  38 0016 0F31     	    rdtsc                           # Get entropy
+  39 0018 48C1E803 	    shrq    $3, %rax                # Apply empirical shift
+  40 001c 4831D2   	    xorq    %rdx, %rdx
+  41 001f 4C89C3   	    movq    %r8, %rbx
+  42 0022 48FFC3   	    incq    %rbx                    # Divisor = i + 1
+  43 0025 48F7F3   	    divq    %rbx                    # RDX = remainder j
+  44              	
+  45              	    # --- MOV Swap (Performance Optimized) ---
+  46 0028 428A0407 	    movb    (%rdi, %r8), %al        # Load buffer[i]
+  47 002c 8A0C17   	    movb    (%rdi, %rdx), %cl       # Load buffer[j]
+  48 002f 42880C07 	    movb    %cl, (%rdi, %r8)        # Store buffer[j] at i
+  49 0033 880417   	    movb    %al, (%rdi, %rdx)       # Store buffer[i] at j
+  50              	    
+  51 0036 EBD9     	    jmp     .Lloop
+  52              	
+  53              	.Ldone:
+  54 0038 C3       	    ret
+  55              	
+  56              	.size fisher_yates_shuffle, .-fisher_yates_shuffle
+  57              	.section .note.GNU-stack,"",@progbits
+GAS LISTING utils/math/fisher_yates_shuffle.s 			page 2
+
+
+GAS LISTING utils/math/fisher_yates_shuffle.s 			page 3
+
+
+DEFINED SYMBOLS
+utils/math/fisher_yates_shuffle.s:23     .text:0000000000000000 fisher_yates_shuffle
+
+NO UNDEFINED SYMBOLS

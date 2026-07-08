@@ -1,0 +1,767 @@
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 1
+
+
+   1              	/* 
+   2              	 **************************************************************************
+   3              	 * Name         : dirinfo.s
+   4              	 * Description  : Displays detailed directory entry information for the 
+   5              	 * current working directory.
+   6              	 *
+   7              	 *
+   8              	 * Build Sequence:
+   9              	 * 1. Assemble Project Main:
+  10              	 * as --64 -g dirinfo.s -o dirinfo.o
+  11              	 *
+  12              	 * * 2. Assemble Libraries:
+  13              	 * as --64 -g strlen.s -o strlen.o
+  14              	 * as --64 -g print_stringz.s -o print_stringz.o
+  15              	 * as --64 -g u64toa.s -o u64toa.o
+  16              	 * as --64 -g u64tohex.s -o u64tohex.o
+  17              	 *
+  18              	 * 3. Link Executable:
+  19              	 * ld -m elf_x86_64 -pie --dynamic-linker /lib64/ld-linux-x86-64.so.2 \
+  20              	 * -o dirinfo dirinfo.o strlen.o print_stringz.o u64toa.o u64tohex.o
+  21              	 *
+  22              	 *
+  23              	 * Overview:
+  24              	 * This program utilizes the Linux 'getdents64' syscall to read raw directory
+  25              	 * structures. It parses the resulting buffer to extract inodes, offsets,
+  26              	 * record lengths, and file types, formatting them into a readable table.
+  27              	 *
+  28              	 * Logic Flow:
+  29              	 * 1. Opens the current directory (".") using O_DIRECTORY flag.
+  30              	 * 2. Reads directory entries into a 4KB buffer.
+  31              	 * 3. Iterates through the buffer using 'd_reclen' to find the next entry.
+  32              	 * 4. Translates the 'd_type' byte into a human-readable string using a
+  33              	 * PIE-safe lookup table.
+  34              	 * 5. Uses external library functions for numeric-to-string conversion.
+  35              	 * **************************************************************************
+  36              	 */
+  37              	
+  40              	.list
+  41              	
+  42              	.equ O_RDONLY, 0
+  43              	.equ O_DIRECTORY, 0200000
+  44              	
+  45              	.section .rodata
+  46 0000 2020696E 	    tableheader: .asciz "  inode   |   next entry     | record length |        filetype          | 
+  46      6F646520 
+  46      20207C20 
+  46      20206E65 
+  46      78742065 
+  47 0057 20202020 	    totallength: .asciz "                  Total length |"
+  47      20202020 
+  47      20202020 
+  47      20202020 
+  47      2020546F 
+  48 0078 2000     	    spacer:      .asciz " "
+  49 007a 7C00     	    col:         .asciz "|"
+  50 007c 2D2D2D2D 	    line:        .asciz "--------------------------------------------------------------------------
+  50      2D2D2D2D 
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 2
+
+
+  50      2D2D2D2D 
+  50      2D2D2D2D 
+  50      2D2D2D2D 
+  51 00e7 0A00     	    crlf:        .asciz "\n"
+  52 00e9 2E00     	    path:        .asciz "."
+  53              	
+  54              	    # File Type Strings
+  55 00eb 756E6B6E 	    type_unk:    .asciz "unknown           "
+  55      6F776E20 
+  55      20202020 
+  55      20202020 
+  55      202000
+  56 00fe 72656775 	    type_reg:    .asciz "regular file      "
+  56      6C617220 
+  56      66696C65 
+  56      20202020 
+  56      202000
+  57 0111 64697265 	    type_dir:    .asciz "directory         "
+  57      63746F72 
+  57      79202020 
+  57      20202020 
+  57      202000
+  58 0124 756E6978 	    type_soc:    .asciz "unix domain socket"
+  58      20646F6D 
+  58      61696E20 
+  58      736F636B 
+  58      657400
+  59 0137 63686172 	    type_chr:    .asciz "character device  "
+  59      61637465 
+  59      72206465 
+  59      76696365 
+  59      202000
+  60 014a 73796D62 	    type_lnk:    .asciz "symbolic link     "
+  60      6F6C6963 
+  60      206C696E 
+  60      6B202020 
+  60      202000
+  61 015d 626C6F63 	    type_blk:    .asciz "block device      "
+  61      6B206465 
+  61      76696365 
+  61      20202020 
+  61      202000
+  62 0170 656E7472 	    type_non:    .asciz "entry without type"
+  62      79207769 
+  62      74686F75 
+  62      74207479 
+  62      706500
+  63 0183 6E616D65 	    type_pip:    .asciz "named pipe        "
+  63      64207069 
+  63      70652020 
+  63      20202020 
+  63      202000
+  64              	
+  65 0196 0000     	    .align 8
+  66              	    type_table:  
+  67 0198 53FFFFFF 	    .quad type_unk - type_table
+  67      FFFFFFFF 
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 3
+
+
+  68 01a0 66FFFFFF 	    .quad type_reg - type_table
+  68      FFFFFFFF 
+  69 01a8 79FFFFFF 	    .quad type_dir - type_table  
+  69      FFFFFFFF 
+  70 01b0 8CFFFFFF 	    .quad type_soc - type_table
+  70      FFFFFFFF 
+  71 01b8 9FFFFFFF 	    .quad type_chr - type_table
+  71      FFFFFFFF 
+  72 01c0 B2FFFFFF 	    .quad type_lnk - type_table
+  72      FFFFFFFF 
+  73 01c8 C5FFFFFF 	    .quad type_blk - type_table
+  73      FFFFFFFF 
+  74 01d0 D8FFFFFF 	    .quad type_non - type_table
+  74      FFFFFFFF 
+  75 01d8 EBFFFFFF 	    .quad type_pip - type_table
+  75      FFFFFFFF 
+  76              	
+  77              	.section .bss
+  78              	    .align 16
+  79 0000 00000000 	    buffer:      .skip 4096            
+  79      00000000 
+  79      00000000 
+  79      00000000 
+  79      00000000 
+  80              	    .equ BUFFER_LEN, 4096
+  81 1000 00000000 	    fd:          .quad 0
+  81      00000000 
+  82 1008 00000000 	    nread:       .quad 0
+  82      00000000 
+  83 1010 00000000 	    dirent_buf:  .skip 512             
+  83      00000000 
+  83      00000000 
+  83      00000000 
+  83      00000000 
+  84 1210 00000000 	    conv_buf:    .skip 64              
+  84      00000000 
+  84      00000000 
+  84      00000000 
+  84      00000000 
+  85              	
+  86              	.section .text
+  87              	    .globl _start
+  88              	    .extern strlen
+  89              	    .extern print_stringz
+  90              	    .extern u64toa
+  91              	    .extern u64tohex
+  92              	
+  93              	_start:
+  94              	    # 1. Open Directory
+  95:tui/basics/dirinfo/dirinfo.s ****     leaq    path(%rip), %rdi
+  96:tui/basics/dirinfo/dirinfo.s ****     movq    $(O_RDONLY | O_DIRECTORY), %rsi
+  97:tui/basics/dirinfo/dirinfo.s ****     movq    $open, %rax
+  98:tui/basics/dirinfo/dirinfo.s ****     syscall
+  99              	    
+ 100:tui/basics/dirinfo/dirinfo.s ****     cmpq    $0, %rax
+ 101:tui/basics/dirinfo/dirinfo.s ****     jl      .Lexit_error
+ 102:tui/basics/dirinfo/dirinfo.s ****     movq    %rax, fd(%rip)
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 4
+
+
+ 103              	
+ 104              	    # 2. Get Directory Entries
+ 105:tui/basics/dirinfo/dirinfo.s ****     movq    %rax, %rdi               
+ 106:tui/basics/dirinfo/dirinfo.s ****     leaq    buffer(%rip), %rsi
+ 107:tui/basics/dirinfo/dirinfo.s ****     movq    $BUFFER_LEN, %rdx
+ 108:tui/basics/dirinfo/dirinfo.s ****     movq    $getdents64, %rax
+ 109:tui/basics/dirinfo/dirinfo.s ****     syscall
+ 110              	    
+ 111:tui/basics/dirinfo/dirinfo.s ****     cmpq    $0, %rax
+ 112:tui/basics/dirinfo/dirinfo.s ****     jle     .Lcleanup               
+ 113:tui/basics/dirinfo/dirinfo.s ****     movq    %rax, nread(%rip)
+ 114              	    
+ 115              	    # 3. Print Header
+ 116:tui/basics/dirinfo/dirinfo.s ****     movq    $stdout, %rdi
+ 117:tui/basics/dirinfo/dirinfo.s ****     leaq    line(%rip), %rsi
+ 118:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 119:tui/basics/dirinfo/dirinfo.s ****     leaq    tableheader(%rip), %rsi
+ 120:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 121:tui/basics/dirinfo/dirinfo.s ****     leaq    line(%rip), %rsi
+ 122:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 123              	    
+ 124:tui/basics/dirinfo/dirinfo.s ****     xorq    %r12, %r12                      # r12 = offset tracker
+ 125              	.Lloop:
+ 126:tui/basics/dirinfo/dirinfo.s ****     leaq    buffer(%rip), %rbx
+ 127:tui/basics/dirinfo/dirinfo.s ****     addq    %r12, %rbx                      # current d_entry pointer
+ 128:tui/basics/dirinfo/dirinfo.s ****     movzwq  16(%rbx), %rcx                  # rcx = d_reclen
+ 129              	    
+ 130              	    # Copy record to local buffer
+ 131:tui/basics/dirinfo/dirinfo.s ****     movq    %rbx, %rsi
+ 132:tui/basics/dirinfo/dirinfo.s ****     leaq    dirent_buf(%rip), %rdi
+ 133:tui/basics/dirinfo/dirinfo.s ****     pushq   %rcx                     
+ 134:tui/basics/dirinfo/dirinfo.s ****     cld
+ 135:tui/basics/dirinfo/dirinfo.s ****     rep     movsb
+ 136:tui/basics/dirinfo/dirinfo.s ****     popq    %rcx                     
+ 137              	
+ 138:tui/basics/dirinfo/dirinfo.s ****     leaq    dirent_buf(%rip), %r13          # r13 = local entry floor
+ 139              	    
+ 140              	    # --- Column: Inode ---
+ 141:tui/basics/dirinfo/dirinfo.s ****     movq    $stdout, %rdi
+ 142:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 143:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 144              	
+ 145:tui/basics/dirinfo/dirinfo.s ****     movq    (%r13), %rdi                    # d_ino
+ 146:tui/basics/dirinfo/dirinfo.s ****     call    .Lprepare_conv_buffer
+ 147:tui/basics/dirinfo/dirinfo.s ****     call    u64toa
+ 148:tui/basics/dirinfo/dirinfo.s ****     call    .Lprint_lib_output              # Uses print_stringz on numeric result
+ 149              	    
+ 150:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 151:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 152:tui/basics/dirinfo/dirinfo.s ****     leaq    col(%rip), %rsi
+ 153:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 154              	    
+ 155              	    # --- Column: Offset (Hex) ---
+ 156:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 157:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 158:tui/basics/dirinfo/dirinfo.s ****     movq    8(%r13), %rdi                   # d_off
+ 159:tui/basics/dirinfo/dirinfo.s ****     call    .Lprepare_conv_buffer
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 5
+
+
+ 160:tui/basics/dirinfo/dirinfo.s ****     call    u64tohex
+ 161:tui/basics/dirinfo/dirinfo.s ****     call    .Lprint_lib_output
+ 162              	    
+ 163:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 164:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 165:tui/basics/dirinfo/dirinfo.s ****     leaq    col(%rip), %rsi
+ 166:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 167              	    
+ 168              	    # --- Column: Record Length ---
+ 169:tui/basics/dirinfo/dirinfo.s ****     movq    $6, %rax
+ 170:tui/basics/dirinfo/dirinfo.s ****     call    .Lprint_spacers
+ 171:tui/basics/dirinfo/dirinfo.s ****     movzwq  16(%r13), %rdi                  # d_reclen
+ 172:tui/basics/dirinfo/dirinfo.s ****     call    .Lprepare_conv_buffer
+ 173:tui/basics/dirinfo/dirinfo.s ****     call    u64toa
+ 174:tui/basics/dirinfo/dirinfo.s ****     call    .Lprint_lib_output
+ 175              	    
+ 176:tui/basics/dirinfo/dirinfo.s ****     movq    $1, %rax
+ 177:tui/basics/dirinfo/dirinfo.s ****     call    .Lprint_spacers
+ 178:tui/basics/dirinfo/dirinfo.s ****     leaq    col(%rip), %rsi
+ 179:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 180              	
+ 181              	    # --- Column: File Type ---
+ 182:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 183:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 184              	    
+ 185:tui/basics/dirinfo/dirinfo.s ****     movzbq  18(%r13), %rax                  # d_type numeric index
+ 186:tui/basics/dirinfo/dirinfo.s ****     andq    $0x0F, %rax                     # Ensure index is within range (0-8)
+ 187              	    
+ 188:tui/basics/dirinfo/dirinfo.s ****     leaq    type_table(%rip), %rbx          # Get base address of table (PIE-safe)
+ 189:tui/basics/dirinfo/dirinfo.s ****     movq    (%rbx, %rax, 8), %rsi           # Load the relative OFFSET from table
+ 190:tui/basics/dirinfo/dirinfo.s ****     addq    %rbx, %rsi                      # Final Pointer = Table Base + Offset
+ 191              	    
+ 192:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz                   # Now RSI points to a valid string
+ 193              	
+ 194:tui/basics/dirinfo/dirinfo.s ****     leaq    col(%rip), %rsi
+ 195:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 196              	
+ 197              	    # --- Column: Name ---
+ 198:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 199:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 200:tui/basics/dirinfo/dirinfo.s ****     leaq    19(%r13), %rsi                  # d_name
+ 201:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 202              	    
+ 203:tui/basics/dirinfo/dirinfo.s ****     leaq    crlf(%rip), %rsi
+ 204:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 205              	    
+ 206              	    # Advance
+ 207:tui/basics/dirinfo/dirinfo.s ****     movzwq  16(%r13), %rax
+ 208:tui/basics/dirinfo/dirinfo.s ****     addq    %rax, %r12               
+ 209:tui/basics/dirinfo/dirinfo.s ****     cmpq    nread(%rip), %r12               
+ 210:tui/basics/dirinfo/dirinfo.s ****     jl      .Lloop
+ 211              	
+ 212              	.Lfooter:
+ 213:tui/basics/dirinfo/dirinfo.s ****     leaq    line(%rip), %rsi
+ 214:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 215:tui/basics/dirinfo/dirinfo.s ****     leaq    totallength(%rip), %rsi
+ 216:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 6
+
+
+ 217:tui/basics/dirinfo/dirinfo.s ****     movq    nread(%rip), %rdi
+ 218:tui/basics/dirinfo/dirinfo.s ****     call    .Lprepare_conv_buffer
+ 219:tui/basics/dirinfo/dirinfo.s ****     call    u64toa
+ 220:tui/basics/dirinfo/dirinfo.s ****     call    .Lprint_lib_output
+ 221:tui/basics/dirinfo/dirinfo.s ****     leaq    crlf(%rip), %rsi
+ 222:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 223              	      
+ 224              	.Lcleanup:
+ 225:tui/basics/dirinfo/dirinfo.s ****     movq    fd(%rip), %rdi
+ 226:tui/basics/dirinfo/dirinfo.s ****     movq    $close, %rax
+ 227:tui/basics/dirinfo/dirinfo.s ****     syscall
+ 228              	
+ 229              	.Lexit_error:
+ 230:tui/basics/dirinfo/dirinfo.s ****     movq    $exit, %rax
+ 231:tui/basics/dirinfo/dirinfo.s ****     xorq    %rdi, %rdi
+ 232:tui/basics/dirinfo/dirinfo.s ****     syscall
+ 233              	
+ 234              	# --- Helpers ---
+ 235              	
+ 236              	.Lprepare_conv_buffer:
+ 237              	    # Set RSI = start, RDX = 63, and place null at index 63
+ 238:tui/basics/dirinfo/dirinfo.s ****     leaq    conv_buf(%rip), %rsi
+ 239:tui/basics/dirinfo/dirinfo.s ****     movq    $63, %rdx
+ 240:tui/basics/dirinfo/dirinfo.s ****     movb    $0, 63(%rsi)                    # Pre-terminate the buffer
+ 241:tui/basics/dirinfo/dirinfo.s ****     ret
+ 242              	
+ 243              	.Lprint_lib_output:
+ 244              	    # Library returns pointer in RSI
+ 245              	    # Since we pre-terminated, it is a valid Z-string
+ 246:tui/basics/dirinfo/dirinfo.s ****     movq    $stdout, %rdi
+ 247:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 248:tui/basics/dirinfo/dirinfo.s ****     ret
+ 249              	
+ 250              	.Lprint_spacers:
+ 251:tui/basics/dirinfo/dirinfo.s ****     movq    %rax, %rcx
+ 252:tui/basics/dirinfo/dirinfo.s **** 1:  pushq   %rcx
+ 253:tui/basics/dirinfo/dirinfo.s ****     leaq    spacer(%rip), %rsi
+ 254:tui/basics/dirinfo/dirinfo.s ****     movq    $stdout, %rdi
+ 255:tui/basics/dirinfo/dirinfo.s ****     call    print_stringz
+ 256:tui/basics/dirinfo/dirinfo.s ****     popq    %rcx
+ 257:tui/basics/dirinfo/dirinfo.s ****     loop    1b
+ 258:tui/basics/dirinfo/dirinfo.s ****     ret
+ 259              	
+ 260              	.size _start, . - _start
+ 261              	.section .note.GNU-stack,"",@progbits
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 7
+
+
+DEFINED SYMBOLS
+ includes/unistd.inc:2      *ABS*:0000000000000001 _ASM_UNISTD_64_AS
+ includes/unistd.inc:8      *ABS*:0000000000000000 read
+ includes/unistd.inc:9      *ABS*:0000000000000001 write
+ includes/unistd.inc:10     *ABS*:0000000000000002 open
+ includes/unistd.inc:11     *ABS*:0000000000000003 close
+ includes/unistd.inc:12     *ABS*:0000000000000004 stat
+ includes/unistd.inc:13     *ABS*:0000000000000005 fstat
+ includes/unistd.inc:14     *ABS*:0000000000000006 lstat
+ includes/unistd.inc:15     *ABS*:0000000000000007 poll
+ includes/unistd.inc:16     *ABS*:0000000000000008 lseek
+ includes/unistd.inc:17     *ABS*:0000000000000009 mmap
+ includes/unistd.inc:18     *ABS*:000000000000000a mprotect
+ includes/unistd.inc:19     *ABS*:000000000000000b munmap
+ includes/unistd.inc:20     *ABS*:000000000000000c brk
+ includes/unistd.inc:21     *ABS*:000000000000000d rt_sigaction
+ includes/unistd.inc:22     *ABS*:000000000000000e rt_sigprocmask
+ includes/unistd.inc:23     *ABS*:000000000000000f rt_sigreturn
+ includes/unistd.inc:24     *ABS*:0000000000000010 ioctl
+ includes/unistd.inc:25     *ABS*:0000000000000011 pread64
+ includes/unistd.inc:26     *ABS*:0000000000000012 pwrite64
+ includes/unistd.inc:27     *ABS*:0000000000000013 readv
+ includes/unistd.inc:28     *ABS*:0000000000000014 writev
+ includes/unistd.inc:29     *ABS*:0000000000000015 access
+ includes/unistd.inc:30     *ABS*:0000000000000016 pipe
+ includes/unistd.inc:31     *ABS*:0000000000000017 select
+ includes/unistd.inc:32     *ABS*:0000000000000018 sched_yield
+ includes/unistd.inc:33     *ABS*:0000000000000019 mremap
+ includes/unistd.inc:34     *ABS*:000000000000001a msync
+ includes/unistd.inc:35     *ABS*:000000000000001b mincore
+ includes/unistd.inc:36     *ABS*:000000000000001c madvise
+ includes/unistd.inc:37     *ABS*:000000000000001d shmget
+ includes/unistd.inc:38     *ABS*:000000000000001e shmat
+ includes/unistd.inc:39     *ABS*:000000000000001f shmctl
+ includes/unistd.inc:40     *ABS*:0000000000000020 dup
+ includes/unistd.inc:41     *ABS*:0000000000000021 dup2
+ includes/unistd.inc:42     *ABS*:0000000000000022 pause
+ includes/unistd.inc:43     *ABS*:0000000000000023 nanosleep
+ includes/unistd.inc:44     *ABS*:0000000000000024 getitimer
+ includes/unistd.inc:45     *ABS*:0000000000000025 alarm
+ includes/unistd.inc:46     *ABS*:0000000000000026 setitimer
+ includes/unistd.inc:47     *ABS*:0000000000000027 getpid
+ includes/unistd.inc:48     *ABS*:0000000000000028 sendfile
+ includes/unistd.inc:49     *ABS*:0000000000000029 socket
+ includes/unistd.inc:50     *ABS*:000000000000002a connect
+ includes/unistd.inc:51     *ABS*:000000000000002b accept
+ includes/unistd.inc:52     *ABS*:000000000000002c sendto
+ includes/unistd.inc:53     *ABS*:000000000000002d recvfrom
+ includes/unistd.inc:54     *ABS*:000000000000002e sendmsg
+ includes/unistd.inc:55     *ABS*:000000000000002f recvmsg
+ includes/unistd.inc:56     *ABS*:0000000000000030 shutdown
+ includes/unistd.inc:57     *ABS*:0000000000000031 bind
+ includes/unistd.inc:58     *ABS*:0000000000000032 listen
+ includes/unistd.inc:59     *ABS*:0000000000000033 getsockname
+ includes/unistd.inc:60     *ABS*:0000000000000034 getpeername
+ includes/unistd.inc:61     *ABS*:0000000000000035 socketpair
+ includes/unistd.inc:62     *ABS*:0000000000000036 setsockopt
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 8
+
+
+ includes/unistd.inc:63     *ABS*:0000000000000037 getsockopt
+ includes/unistd.inc:64     *ABS*:0000000000000038 clone
+ includes/unistd.inc:65     *ABS*:0000000000000039 fork
+ includes/unistd.inc:66     *ABS*:000000000000003a vfork
+ includes/unistd.inc:67     *ABS*:000000000000003b execve
+ includes/unistd.inc:68     *ABS*:000000000000003c exit
+ includes/unistd.inc:69     *ABS*:000000000000003d wait4
+ includes/unistd.inc:70     *ABS*:000000000000003e kill
+ includes/unistd.inc:71     *ABS*:000000000000003f uname
+ includes/unistd.inc:72     *ABS*:0000000000000040 semget
+ includes/unistd.inc:73     *ABS*:0000000000000041 semop
+ includes/unistd.inc:74     *ABS*:0000000000000042 semctl
+ includes/unistd.inc:75     *ABS*:0000000000000043 shmdt
+ includes/unistd.inc:76     *ABS*:0000000000000044 msgget
+ includes/unistd.inc:77     *ABS*:0000000000000045 msgsnd
+ includes/unistd.inc:78     *ABS*:0000000000000046 msgrcv
+ includes/unistd.inc:79     *ABS*:0000000000000047 msgctl
+ includes/unistd.inc:80     *ABS*:0000000000000048 fcntl
+ includes/unistd.inc:81     *ABS*:0000000000000049 flock
+ includes/unistd.inc:82     *ABS*:000000000000004a fsync
+ includes/unistd.inc:83     *ABS*:000000000000004b fdatasync
+ includes/unistd.inc:84     *ABS*:000000000000004c truncate
+ includes/unistd.inc:85     *ABS*:000000000000004d ftruncate
+ includes/unistd.inc:86     *ABS*:000000000000004e getdents
+ includes/unistd.inc:87     *ABS*:000000000000004f getcwd
+ includes/unistd.inc:88     *ABS*:0000000000000050 chdir
+ includes/unistd.inc:89     *ABS*:0000000000000051 fchdir
+ includes/unistd.inc:90     *ABS*:0000000000000052 rename
+ includes/unistd.inc:91     *ABS*:0000000000000053 mkdir
+ includes/unistd.inc:92     *ABS*:0000000000000054 rmdir
+ includes/unistd.inc:93     *ABS*:0000000000000055 creat
+ includes/unistd.inc:94     *ABS*:0000000000000056 link
+ includes/unistd.inc:95     *ABS*:0000000000000057 unlink
+ includes/unistd.inc:96     *ABS*:0000000000000058 symlink
+ includes/unistd.inc:97     *ABS*:0000000000000059 readlink
+ includes/unistd.inc:98     *ABS*:000000000000005a chmod
+ includes/unistd.inc:99     *ABS*:000000000000005b fchmod
+ includes/unistd.inc:100    *ABS*:000000000000005c chown
+ includes/unistd.inc:101    *ABS*:000000000000005d fchown
+ includes/unistd.inc:102    *ABS*:000000000000005e lchown
+ includes/unistd.inc:103    *ABS*:000000000000005f umask
+ includes/unistd.inc:104    *ABS*:0000000000000060 gettimeofday
+ includes/unistd.inc:105    *ABS*:0000000000000061 getrlimit
+ includes/unistd.inc:106    *ABS*:0000000000000062 getrusage
+ includes/unistd.inc:107    *ABS*:0000000000000063 sysinfo
+ includes/unistd.inc:108    *ABS*:0000000000000064 times
+ includes/unistd.inc:109    *ABS*:0000000000000065 ptrace
+ includes/unistd.inc:110    *ABS*:0000000000000066 getuid
+ includes/unistd.inc:111    *ABS*:0000000000000067 syslog
+ includes/unistd.inc:112    *ABS*:0000000000000068 getgid
+ includes/unistd.inc:113    *ABS*:0000000000000069 setuid
+ includes/unistd.inc:114    *ABS*:000000000000006a setgid
+ includes/unistd.inc:115    *ABS*:000000000000006b geteuid
+ includes/unistd.inc:116    *ABS*:000000000000006c getegid
+ includes/unistd.inc:117    *ABS*:000000000000006d setpgid
+ includes/unistd.inc:118    *ABS*:000000000000006e getppid
+ includes/unistd.inc:119    *ABS*:000000000000006f getpgrp
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 9
+
+
+ includes/unistd.inc:120    *ABS*:0000000000000070 setsid
+ includes/unistd.inc:121    *ABS*:0000000000000071 setreuid
+ includes/unistd.inc:122    *ABS*:0000000000000072 setregid
+ includes/unistd.inc:123    *ABS*:0000000000000073 getgroups
+ includes/unistd.inc:124    *ABS*:0000000000000074 setgroups
+ includes/unistd.inc:125    *ABS*:0000000000000075 setresuid
+ includes/unistd.inc:126    *ABS*:0000000000000076 getresuid
+ includes/unistd.inc:127    *ABS*:0000000000000077 setresgid
+ includes/unistd.inc:128    *ABS*:0000000000000078 getresgid
+ includes/unistd.inc:129    *ABS*:0000000000000079 getpgid
+ includes/unistd.inc:130    *ABS*:000000000000007a setfsuid
+ includes/unistd.inc:131    *ABS*:000000000000007b setfsgid
+ includes/unistd.inc:132    *ABS*:000000000000007c getsid
+ includes/unistd.inc:133    *ABS*:000000000000007d capget
+ includes/unistd.inc:134    *ABS*:000000000000007e capset
+ includes/unistd.inc:135    *ABS*:000000000000007f rt_sigpending
+ includes/unistd.inc:136    *ABS*:0000000000000080 rt_sigtimedwait
+ includes/unistd.inc:137    *ABS*:0000000000000081 rt_sigqueueinfo
+ includes/unistd.inc:138    *ABS*:0000000000000082 rt_sigsuspend
+ includes/unistd.inc:139    *ABS*:0000000000000083 sigaltstack
+ includes/unistd.inc:140    *ABS*:0000000000000084 utime
+ includes/unistd.inc:141    *ABS*:0000000000000085 mknod
+ includes/unistd.inc:142    *ABS*:0000000000000086 uselib
+ includes/unistd.inc:143    *ABS*:0000000000000087 personality
+ includes/unistd.inc:144    *ABS*:0000000000000088 ustat
+ includes/unistd.inc:145    *ABS*:0000000000000089 statfs
+ includes/unistd.inc:146    *ABS*:000000000000008a fstatfs
+ includes/unistd.inc:147    *ABS*:000000000000008b sysfs
+ includes/unistd.inc:148    *ABS*:000000000000008c getpriority
+ includes/unistd.inc:149    *ABS*:000000000000008d setpriority
+ includes/unistd.inc:150    *ABS*:000000000000008e sched_setparam
+ includes/unistd.inc:151    *ABS*:000000000000008f sched_getparam
+ includes/unistd.inc:152    *ABS*:0000000000000090 sched_setscheduler
+ includes/unistd.inc:153    *ABS*:0000000000000091 sched_getscheduler
+ includes/unistd.inc:154    *ABS*:0000000000000092 sched_get_priority_max
+ includes/unistd.inc:155    *ABS*:0000000000000093 sched_get_priority_min
+ includes/unistd.inc:156    *ABS*:0000000000000094 sched_rr_get_interval
+ includes/unistd.inc:157    *ABS*:0000000000000095 mlock
+ includes/unistd.inc:158    *ABS*:0000000000000096 munlock
+ includes/unistd.inc:159    *ABS*:0000000000000097 mlockall
+ includes/unistd.inc:160    *ABS*:0000000000000098 munlockall
+ includes/unistd.inc:161    *ABS*:0000000000000099 vhangup
+ includes/unistd.inc:162    *ABS*:000000000000009a modify_ldt
+ includes/unistd.inc:163    *ABS*:000000000000009b pivot_root
+ includes/unistd.inc:164    *ABS*:000000000000009c _sysctl
+ includes/unistd.inc:165    *ABS*:000000000000009d prctl
+ includes/unistd.inc:166    *ABS*:000000000000009e arch_prctl
+ includes/unistd.inc:167    *ABS*:000000000000009f adjtimex
+ includes/unistd.inc:168    *ABS*:00000000000000a0 setrlimit
+ includes/unistd.inc:169    *ABS*:00000000000000a1 chroot
+ includes/unistd.inc:170    *ABS*:00000000000000a2 sync
+ includes/unistd.inc:171    *ABS*:00000000000000a3 acct
+ includes/unistd.inc:172    *ABS*:00000000000000a4 settimeofday
+ includes/unistd.inc:173    *ABS*:00000000000000a5 mount
+ includes/unistd.inc:174    *ABS*:00000000000000a6 umount2
+ includes/unistd.inc:175    *ABS*:00000000000000a7 swapon
+ includes/unistd.inc:176    *ABS*:00000000000000a8 swapoff
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 10
+
+
+ includes/unistd.inc:177    *ABS*:00000000000000a9 reboot
+ includes/unistd.inc:178    *ABS*:00000000000000aa sethostname
+ includes/unistd.inc:179    *ABS*:00000000000000ab setdomainname
+ includes/unistd.inc:180    *ABS*:00000000000000ac iopl
+ includes/unistd.inc:181    *ABS*:00000000000000ad ioperm
+ includes/unistd.inc:182    *ABS*:00000000000000ae create_module
+ includes/unistd.inc:183    *ABS*:00000000000000af init_module
+ includes/unistd.inc:184    *ABS*:00000000000000b0 delete_module
+ includes/unistd.inc:185    *ABS*:00000000000000b1 get_kernel_syms
+ includes/unistd.inc:186    *ABS*:00000000000000b2 query_module
+ includes/unistd.inc:187    *ABS*:00000000000000b3 quotactl
+ includes/unistd.inc:188    *ABS*:00000000000000b4 nfsservctl
+ includes/unistd.inc:189    *ABS*:00000000000000b5 getpmsg
+ includes/unistd.inc:190    *ABS*:00000000000000b6 putpmsg
+ includes/unistd.inc:191    *ABS*:00000000000000b7 afs_syscall
+ includes/unistd.inc:192    *ABS*:00000000000000b8 tuxcall
+ includes/unistd.inc:193    *ABS*:00000000000000b9 security
+ includes/unistd.inc:194    *ABS*:00000000000000ba gettid
+ includes/unistd.inc:195    *ABS*:00000000000000bb readahead
+ includes/unistd.inc:196    *ABS*:00000000000000bc setxattr
+ includes/unistd.inc:197    *ABS*:00000000000000bd lsetxattr
+ includes/unistd.inc:198    *ABS*:00000000000000be fsetxattr
+ includes/unistd.inc:199    *ABS*:00000000000000bf getxattr
+ includes/unistd.inc:200    *ABS*:00000000000000c0 lgetxattr
+ includes/unistd.inc:201    *ABS*:00000000000000c1 fgetxattr
+ includes/unistd.inc:202    *ABS*:00000000000000c2 listxattr
+ includes/unistd.inc:203    *ABS*:00000000000000c3 llistxattr
+ includes/unistd.inc:204    *ABS*:00000000000000c4 flistxattr
+ includes/unistd.inc:205    *ABS*:00000000000000c5 removexattr
+ includes/unistd.inc:206    *ABS*:00000000000000c6 lremovexattr
+ includes/unistd.inc:207    *ABS*:00000000000000c7 fremovexattr
+ includes/unistd.inc:208    *ABS*:00000000000000c8 tkill
+ includes/unistd.inc:209    *ABS*:00000000000000c9 time
+ includes/unistd.inc:210    *ABS*:00000000000000ca futex
+ includes/unistd.inc:211    *ABS*:00000000000000cb sched_setaffinity
+ includes/unistd.inc:212    *ABS*:00000000000000cc sched_getaffinity
+ includes/unistd.inc:213    *ABS*:00000000000000cd set_thread_area
+ includes/unistd.inc:214    *ABS*:00000000000000ce io_setup
+ includes/unistd.inc:215    *ABS*:00000000000000cf io_destroy
+ includes/unistd.inc:216    *ABS*:00000000000000d0 io_getevents
+ includes/unistd.inc:217    *ABS*:00000000000000d1 io_submit
+ includes/unistd.inc:218    *ABS*:00000000000000d2 io_cancel
+ includes/unistd.inc:219    *ABS*:00000000000000d3 get_thread_area
+ includes/unistd.inc:220    *ABS*:00000000000000d4 lookup_dcookie
+ includes/unistd.inc:221    *ABS*:00000000000000d5 epoll_create
+ includes/unistd.inc:222    *ABS*:00000000000000d6 epoll_ctl_old
+ includes/unistd.inc:223    *ABS*:00000000000000d7 epoll_wait_old
+ includes/unistd.inc:224    *ABS*:00000000000000d8 remap_file_pages
+ includes/unistd.inc:225    *ABS*:00000000000000d9 getdents64
+ includes/unistd.inc:226    *ABS*:00000000000000da set_tid_address
+ includes/unistd.inc:227    *ABS*:00000000000000db restart_syscall
+ includes/unistd.inc:228    *ABS*:00000000000000dc semtimedop
+ includes/unistd.inc:229    *ABS*:00000000000000dd fadvise64
+ includes/unistd.inc:230    *ABS*:00000000000000de timer_create
+ includes/unistd.inc:231    *ABS*:00000000000000df timer_settime
+ includes/unistd.inc:232    *ABS*:00000000000000e0 timer_gettime
+ includes/unistd.inc:233    *ABS*:00000000000000e1 timer_getoverrun
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 11
+
+
+ includes/unistd.inc:234    *ABS*:00000000000000e2 timer_delete
+ includes/unistd.inc:235    *ABS*:00000000000000e3 clock_settime
+ includes/unistd.inc:236    *ABS*:00000000000000e4 clock_gettime
+ includes/unistd.inc:237    *ABS*:00000000000000e5 clock_getres
+ includes/unistd.inc:238    *ABS*:00000000000000e6 clock_nanosleep
+ includes/unistd.inc:239    *ABS*:00000000000000e7 exit_group
+ includes/unistd.inc:240    *ABS*:00000000000000e8 epoll_wait
+ includes/unistd.inc:241    *ABS*:00000000000000e9 epoll_ctl
+ includes/unistd.inc:242    *ABS*:00000000000000ea tgkill
+ includes/unistd.inc:243    *ABS*:00000000000000eb utimes
+ includes/unistd.inc:244    *ABS*:00000000000000ec vserver
+ includes/unistd.inc:245    *ABS*:00000000000000ed mbind
+ includes/unistd.inc:246    *ABS*:00000000000000ee set_mempolicy
+ includes/unistd.inc:247    *ABS*:00000000000000ef get_mempolicy
+ includes/unistd.inc:248    *ABS*:00000000000000f0 mq_open
+ includes/unistd.inc:249    *ABS*:00000000000000f1 mq_unlink
+ includes/unistd.inc:250    *ABS*:00000000000000f2 mq_timedsend
+ includes/unistd.inc:251    *ABS*:00000000000000f3 mq_timedreceive
+ includes/unistd.inc:252    *ABS*:00000000000000f4 mq_notify
+ includes/unistd.inc:253    *ABS*:00000000000000f5 mq_getsetattr
+ includes/unistd.inc:254    *ABS*:00000000000000f6 kexec_load
+ includes/unistd.inc:255    *ABS*:00000000000000f7 waitid
+ includes/unistd.inc:256    *ABS*:00000000000000f8 add_key
+ includes/unistd.inc:257    *ABS*:00000000000000f9 request_key
+ includes/unistd.inc:258    *ABS*:00000000000000fa keyctl
+ includes/unistd.inc:259    *ABS*:00000000000000fb ioprio_set
+ includes/unistd.inc:260    *ABS*:00000000000000fc ioprio_get
+ includes/unistd.inc:261    *ABS*:00000000000000fd inotify_init
+ includes/unistd.inc:262    *ABS*:00000000000000fe inotify_add_watch
+ includes/unistd.inc:263    *ABS*:00000000000000ff inotify_rm_watch
+ includes/unistd.inc:264    *ABS*:0000000000000100 migrate_pages
+ includes/unistd.inc:265    *ABS*:0000000000000101 openat
+ includes/unistd.inc:266    *ABS*:0000000000000102 mkdirat
+ includes/unistd.inc:267    *ABS*:0000000000000103 mknodat
+ includes/unistd.inc:268    *ABS*:0000000000000104 fchownat
+ includes/unistd.inc:269    *ABS*:0000000000000105 futimesat
+ includes/unistd.inc:270    *ABS*:0000000000000106 newfstatat
+ includes/unistd.inc:271    *ABS*:0000000000000107 unlinkat
+ includes/unistd.inc:272    *ABS*:0000000000000108 renameat
+ includes/unistd.inc:273    *ABS*:0000000000000109 linkat
+ includes/unistd.inc:274    *ABS*:000000000000010a symlinkat
+ includes/unistd.inc:275    *ABS*:000000000000010b readlinkat
+ includes/unistd.inc:276    *ABS*:000000000000010c fchmodat
+ includes/unistd.inc:277    *ABS*:000000000000010d faccessat
+ includes/unistd.inc:278    *ABS*:000000000000010e pselect6
+ includes/unistd.inc:279    *ABS*:000000000000010f ppoll
+ includes/unistd.inc:280    *ABS*:0000000000000110 unshare
+ includes/unistd.inc:281    *ABS*:0000000000000111 set_robust_list
+ includes/unistd.inc:282    *ABS*:0000000000000112 get_robust_list
+ includes/unistd.inc:283    *ABS*:0000000000000113 splice
+ includes/unistd.inc:284    *ABS*:0000000000000114 tee
+ includes/unistd.inc:285    *ABS*:0000000000000115 sync_file_range
+ includes/unistd.inc:286    *ABS*:0000000000000116 vmsplice
+ includes/unistd.inc:287    *ABS*:0000000000000117 move_pages
+ includes/unistd.inc:288    *ABS*:0000000000000118 utimensat
+ includes/unistd.inc:289    *ABS*:0000000000000119 epoll_pwait
+ includes/unistd.inc:290    *ABS*:000000000000011a signalfd
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 12
+
+
+ includes/unistd.inc:291    *ABS*:000000000000011b timerfd_create
+ includes/unistd.inc:292    *ABS*:000000000000011c eventfd
+ includes/unistd.inc:293    *ABS*:000000000000011d fallocate
+ includes/unistd.inc:294    *ABS*:000000000000011e timerfd_settime
+ includes/unistd.inc:295    *ABS*:000000000000011f timerfd_gettime
+ includes/unistd.inc:296    *ABS*:0000000000000120 accept4
+ includes/unistd.inc:297    *ABS*:0000000000000121 signalfd4
+ includes/unistd.inc:298    *ABS*:0000000000000122 eventfd2
+ includes/unistd.inc:299    *ABS*:0000000000000123 epoll_create1
+ includes/unistd.inc:300    *ABS*:0000000000000124 dup3
+ includes/unistd.inc:301    *ABS*:0000000000000125 pipe2
+ includes/unistd.inc:302    *ABS*:0000000000000126 inotify_init1
+ includes/unistd.inc:303    *ABS*:0000000000000127 preadv
+ includes/unistd.inc:304    *ABS*:0000000000000128 pwritev
+ includes/unistd.inc:305    *ABS*:0000000000000129 rt_tgsigqueueinfo
+ includes/unistd.inc:306    *ABS*:000000000000012a perf_event_open
+ includes/unistd.inc:307    *ABS*:000000000000012b recvmmsg
+ includes/unistd.inc:308    *ABS*:000000000000012c fanotify_init
+ includes/unistd.inc:309    *ABS*:000000000000012d fanotify_mark
+ includes/unistd.inc:310    *ABS*:000000000000012e prlimit64
+ includes/unistd.inc:311    *ABS*:000000000000012f name_to_handle_at
+ includes/unistd.inc:312    *ABS*:0000000000000130 open_by_handle_at
+ includes/unistd.inc:313    *ABS*:0000000000000131 clock_adjtime
+ includes/unistd.inc:314    *ABS*:0000000000000132 syncfs
+ includes/unistd.inc:315    *ABS*:0000000000000133 sendmmsg
+ includes/unistd.inc:316    *ABS*:0000000000000134 setns
+ includes/unistd.inc:317    *ABS*:0000000000000135 getcpu
+ includes/unistd.inc:318    *ABS*:0000000000000136 process_vm_readv
+ includes/unistd.inc:319    *ABS*:0000000000000137 process_vm_writev
+ includes/unistd.inc:320    *ABS*:0000000000000138 kcmp
+ includes/unistd.inc:321    *ABS*:0000000000000139 finit_module
+ includes/unistd.inc:322    *ABS*:000000000000013a sched_setattr
+ includes/unistd.inc:323    *ABS*:000000000000013b sched_getattr
+ includes/unistd.inc:324    *ABS*:000000000000013c renameat2
+ includes/unistd.inc:325    *ABS*:000000000000013d seccomp
+ includes/unistd.inc:326    *ABS*:000000000000013e getrandom
+ includes/unistd.inc:327    *ABS*:000000000000013f memfd_create
+ includes/unistd.inc:328    *ABS*:0000000000000140 kexec_file_load
+ includes/unistd.inc:329    *ABS*:0000000000000141 bpf
+ includes/unistd.inc:330    *ABS*:0000000000000142 execveat
+ includes/unistd.inc:331    *ABS*:0000000000000143 userfaultfd
+ includes/unistd.inc:332    *ABS*:0000000000000144 membarrier
+ includes/unistd.inc:333    *ABS*:0000000000000145 mlock2
+ includes/unistd.inc:334    *ABS*:0000000000000146 copy_file_range
+ includes/unistd.inc:335    *ABS*:0000000000000147 preadv2
+ includes/unistd.inc:336    *ABS*:0000000000000148 pwritev2
+ includes/unistd.inc:337    *ABS*:0000000000000149 pkey_mprotect
+ includes/unistd.inc:338    *ABS*:000000000000014a pkey_alloc
+ includes/unistd.inc:339    *ABS*:000000000000014b pkey_free
+ includes/unistd.inc:340    *ABS*:000000000000014c statx
+ includes/unistd.inc:341    *ABS*:000000000000014d io_pgetevents
+ includes/unistd.inc:342    *ABS*:000000000000014e rseq
+ includes/unistd.inc:343    *ABS*:00000000000001a8 pidfd_send_signal
+ includes/unistd.inc:344    *ABS*:00000000000001a9 io_uring_setup
+ includes/unistd.inc:345    *ABS*:00000000000001aa io_uring_enter
+ includes/unistd.inc:346    *ABS*:00000000000001ab io_uring_register
+ includes/unistd.inc:347    *ABS*:00000000000001ac open_tree
+GAS LISTING tui/basics/dirinfo/dirinfo.s 			page 13
+
+
+ includes/unistd.inc:348    *ABS*:00000000000001ad move_mount
+ includes/unistd.inc:349    *ABS*:00000000000001ae fsopen
+ includes/unistd.inc:350    *ABS*:00000000000001af fsconfig
+ includes/unistd.inc:351    *ABS*:00000000000001b0 fsmount
+ includes/unistd.inc:352    *ABS*:00000000000001b1 fspick
+ includes/unistd.inc:353    *ABS*:00000000000001b2 pidfd_open
+ includes/unistd.inc:354    *ABS*:00000000000001b3 clone3
+ includes/unistd.inc:355    *ABS*:00000000000001b4 close_range
+ includes/unistd.inc:356    *ABS*:00000000000001b5 openat2
+ includes/unistd.inc:357    *ABS*:00000000000001b6 pidfd_getfd
+ includes/unistd.inc:358    *ABS*:00000000000001b7 faccessat2
+ includes/unistd.inc:359    *ABS*:00000000000001b8 process_madvise
+ includes/unistd.inc:360    *ABS*:00000000000001b9 epoll_pwait2
+ includes/unistd.inc:361    *ABS*:00000000000001ba mount_setattr
+ includes/unistd.inc:362    *ABS*:00000000000001bb quotactl_fd
+ includes/unistd.inc:363    *ABS*:00000000000001bc landlock_create_ruleset
+ includes/unistd.inc:364    *ABS*:00000000000001bd landlock_add_rule
+ includes/unistd.inc:365    *ABS*:00000000000001be landlock_restrict_self
+ includes/unistd.inc:366    *ABS*:00000000000001bf memfd_secret
+ includes/unistd.inc:367    *ABS*:00000000000001c0 process_mrelease
+ includes/unistd.inc:368    *ABS*:00000000000001c1 futex_waitv
+ includes/unistd.inc:369    *ABS*:00000000000001c2 set_mempolicy_home_node
+ includes/unistd.inc:371    *ABS*:0000000000000000 stdin
+ includes/unistd.inc:372    *ABS*:0000000000000001 stdout
+ includes/unistd.inc:373    *ABS*:0000000000000002 stderr
+tui/basics/dirinfo/dirinfo.s:42     *ABS*:0000000000000000 O_RDONLY
+tui/basics/dirinfo/dirinfo.s:43     *ABS*:0000000000010000 O_DIRECTORY
+tui/basics/dirinfo/dirinfo.s:46     .rodata:0000000000000000 tableheader
+tui/basics/dirinfo/dirinfo.s:47     .rodata:0000000000000057 totallength
+tui/basics/dirinfo/dirinfo.s:48     .rodata:0000000000000078 spacer
+tui/basics/dirinfo/dirinfo.s:49     .rodata:000000000000007a col
+tui/basics/dirinfo/dirinfo.s:50     .rodata:000000000000007c line
+tui/basics/dirinfo/dirinfo.s:51     .rodata:00000000000000e7 crlf
+tui/basics/dirinfo/dirinfo.s:52     .rodata:00000000000000e9 path
+tui/basics/dirinfo/dirinfo.s:55     .rodata:00000000000000eb type_unk
+tui/basics/dirinfo/dirinfo.s:56     .rodata:00000000000000fe type_reg
+tui/basics/dirinfo/dirinfo.s:57     .rodata:0000000000000111 type_dir
+tui/basics/dirinfo/dirinfo.s:58     .rodata:0000000000000124 type_soc
+tui/basics/dirinfo/dirinfo.s:59     .rodata:0000000000000137 type_chr
+tui/basics/dirinfo/dirinfo.s:60     .rodata:000000000000014a type_lnk
+tui/basics/dirinfo/dirinfo.s:61     .rodata:000000000000015d type_blk
+tui/basics/dirinfo/dirinfo.s:62     .rodata:0000000000000170 type_non
+tui/basics/dirinfo/dirinfo.s:63     .rodata:0000000000000183 type_pip
+tui/basics/dirinfo/dirinfo.s:66     .rodata:0000000000000198 type_table
+tui/basics/dirinfo/dirinfo.s:79     .bss:0000000000000000 buffer
+tui/basics/dirinfo/dirinfo.s:80     *ABS*:0000000000001000 BUFFER_LEN
+tui/basics/dirinfo/dirinfo.s:81     .bss:0000000000001000 fd
+tui/basics/dirinfo/dirinfo.s:82     .bss:0000000000001008 nread
+tui/basics/dirinfo/dirinfo.s:83     .bss:0000000000001010 dirent_buf
+tui/basics/dirinfo/dirinfo.s:84     .bss:0000000000001210 conv_buf
+tui/basics/dirinfo/dirinfo.s:93     .text:0000000000000000 _start
+
+UNDEFINED SYMBOLS
+print_stringz
+u64toa
+u64tohex

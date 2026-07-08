@@ -1,0 +1,91 @@
+GAS LISTING utils/strings/strlen.s 			page 1
+
+
+   1              	/* **************************************************************************
+   2              	 * Name         : strlen.s
+   3              	 * Assemble     : as --64 strlen.s -o strlen.o
+   4              	 * Description  : Page-boundary safe Bit-Magic strlen (ABI compliant).
+   5              	 *
+   6              	 * Input        : RDI = pointer to string
+   7              	 * Output       : RAX = length of string
+   8              	 *
+   9              	 * Strategy:
+  10              	 * 1. Byte-align the pointer to an 8-byte boundary to ensure safety.
+  11              	 * 2. Load 8 bytes at a time into a quadword register.
+  12              	 * 3. Apply the formula ((x - 0x01...) & ~x & 0x80...) to detect a NULL byte.
+  13              	 * 4. Use 'bsfq' (Bit Scan Forward) to locate the exact byte within the 
+  14              	 * register once a NULL is detected.
+  15              	 * ************************************************************************** */
+  16              	
+  17              	.section .text
+  18              	.globl strlen
+  19              	.type strlen, @function
+  20              	
+  21              	strlen:
+  22              	    # --- Prologue ---
+  23 0000 55       	    pushq   %rbp            # Save caller's frame pointer
+  24 0001 4889E5   	    movq    %rsp, %rbp      # Establish 16-byte alignment
+  25 0004 53       	    pushq   %rbx            # Preserve callee-saved RBX
+  26 0005 4889F8   	    movq    %rdi, %rax      # Working pointer
+  27              	
+  28              	    # --- Step 1: Align to 8-byte boundary ---
+  29              	    # Prevents crossing 4k page boundaries during a quadword load.
+  30              	1:
+  31 0008 48A90700 	    testq   $7, %rax        # Is the pointer 8-byte aligned?
+  31      0000
+  32 000e 740A     	    jz      2f              # If yes, start bit-magic
+  33 0010 803800   	    cmpb    $0, (%rax)      # Is it a null terminator?
+  34 0013 743E     	    je      3f              # If yes, exit
+  35 0015 48FFC0   	    incq    %rax            # Move to next byte
+  36 0018 EBEE     	    jmp     1b              
+  37              	
+  38              	    # --- Step 2: Bit-Magic Initialization ---
+  39              	2:
+  40 001a 49B80101 	    movabsq $0x0101010101010101, %r8  # Mask for least significant bits
+  40      01010101 
+  40      0101
+  41 0024 49B98080 	    movabsq $0x8080808080808080, %r9  # Mask for most significant bits
+  41      80808080 
+  41      8080
+  42              	
+  43              	    # --- Step 3: Main Loop (Processing 8 bytes at a time) ---
+  44              	
+  45              	
+  46              	4:
+  47 002e 488B10   	    movq    (%rax), %rdx    # LOAD 8 bytes
+  48 0031 4889D3   	    movq    %rdx, %rbx
+  49              	
+  50 0034 4C29C3   	    subq    %r8, %rbx       # (x - 0x01...)
+  51 0037 48F7D2   	    notq    %rdx            # ~x
+  52 003a 4821D3   	    andq    %rdx, %rbx      # (x - 0x01...) & ~x
+GAS LISTING utils/strings/strlen.s 			page 2
+
+
+  53 003d 4C21CB   	    andq    %r9, %rbx       # ... & 0x80...
+  54              	
+  55 0040 7506     	    jnz     5f              # If non-zero, a NULL was found
+  56 0042 4883C008 	    addq    $8, %rax        # Move to next quadword
+  57 0046 EBE6     	    jmp     4b              
+  58              	
+  59              	    # --- Step 4: Identify NULL position ---
+  60              	5:
+  61 0048 480FBCDB 	    bsfq    %rbx, %rbx      # Find the first '1' bit
+  62 004c 48C1EB03 	    shrq    $3, %rbx        # Bit index to byte offset (bits / 8)
+  63 0050 4801D8   	    addq    %rbx, %rax      # Add offset to current pointer
+  64              	
+  65              	    # --- Step 5: Final Calculation and Exit ---
+  66              	3:
+  67 0053 4829F8   	    subq    %rdi, %rax      # Result = Current Pointer - Start Pointer
+  68 0056 5B       	    popq    %rbx            # Restore RBX
+  69 0057 5D       	    popq    %rbp            # Restore RBP
+  70 0058 C3       	    ret                     
+  71              	
+  72              	.size strlen, .-strlen
+  73              	.section .note.GNU-stack,"",@progbits
+GAS LISTING utils/strings/strlen.s 			page 3
+
+
+DEFINED SYMBOLS
+utils/strings/strlen.s:21     .text:0000000000000000 strlen
+
+NO UNDEFINED SYMBOLS

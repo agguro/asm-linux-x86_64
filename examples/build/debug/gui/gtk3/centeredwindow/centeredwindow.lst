@@ -1,0 +1,83 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : centeredwindow.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Derived From: ZetCode GTK3 Examples
+     5                                  ; Description : A simple window with the basic functionalities and a title, 
+     6                                  ;               centered on screen
+     7                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     8                                  ; ==============================================================================
+     9                                  
+    10                                  bits 64
+    11                                  
+    12                                  [list -]
+    21                                  
+    22                                  section .data
+    23                                      window:
+    24 00000000 0000000000000000            .handle:    dq    0
+    25 00000008 412063656E74657265-         .title:     db    "A centered window",0
+    25 00000011 642077696E646F7700 
+    26                                  
+    27                                      signal:
+    28 0000001A 64657374726F7900            .destroy:   db    "destroy",0
+    29                                  
+    30                                  section .text
+    31                                      global _start
+    32                                  
+    33                                  _start:
+    34                                      ; 1. Stack Alignment & GTK3 Init
+    35 00000000 488B3C24                    mov         rdi, [rsp]                ; argc
+    36 00000004 488D742408                  lea         rsi, [rsp + 8]            ; argv
+    37                                  
+    38 00000009 4989FC                      mov         r12, rdi                  ; Back-up argc
+    39 0000000C 4989F5                      mov         r13, rsi                  ; Back-up argv
+    40                                  
+    41 0000000F 4883E4F0                    and         rsp, -16                  ; Enforce 16-byte alignment
+    42 00000013 4883EC10                    sub         rsp, 16                   ; Reserved space
+    43                                  
+    44 00000017 488D3C24                    lea         rdi, [rsp]                ; Move &argc to stack
+    45 0000001B 4C8927                      mov         [rdi], r12
+    46 0000001E 488D742408                  lea         rsi, [rsp + 8]            ; Move &argv to stack
+    47 00000023 4C892E                      mov         [rsi], r13
+    48                                  
+    49 00000026 E8(00000000)                call        gtk_init
+    50                                  
+    51                                      ; 2. Build and Configure Window
+    52 0000002B BF00000000                  mov         rdi, GTK_WINDOW_TOPLEVEL
+    53 00000030 E8(00000000)                call        gtk_window_new
+    54 00000035 48890425[00000000]          mov         qword [window.handle], rax
+    55                                  
+    56                                      ; Set Window Properties
+    57 0000003D 488B3C25[00000000]          mov         rdi, qword [window.handle]
+    58 00000045 48BE-                       mov         rsi, window.title
+    58 00000047 [0800000000000000] 
+    59 0000004F E8(00000000)                call        gtk_window_set_title
+    60                                  
+    61 00000054 488B3C25[00000000]          mov         rdi, qword [window.handle]
+    62 0000005C BEE6000000                  mov         rsi, 230
+    63 00000061 BA96000000                  mov         rdx, 150
+    64 00000066 E8(00000000)                call        gtk_window_set_default_size
+    65                                  
+    66 0000006B 488B3C25[00000000]          mov         rdi, qword [window.handle]
+    67 00000073 BE01000000                  mov         rsi, GTK_WIN_POS_CENTER
+    68 00000078 E8(00000000)                call        gtk_window_set_position
+    69                                  
+    70                                      ; 3. Signals & Event Loop
+    71 0000007D 4531C9                      xor         r9d, r9d                  ; GConnectFlags = 0
+    72 00000080 4531C0                      xor         r8d, r8d                  ; GClosureNotify = NULL
+    73 00000083 4831C9                      xor         rcx, rcx                  ; user_data = NULL
+    74 00000086 48BA-                       mov         rdx, gtk_main_quit        ; Pointer to the callback handler
+    74 00000088 [0000000000000000] 
+    75 00000090 48BE-                       mov         rsi, signal.destroy       ; Pointer to the signal string
+    75 00000092 [1A00000000000000] 
+    76 0000009A 488B3C25[00000000]          mov         rdi, qword [window.handle]; Pointer to the widget instance
+    77 000000A2 E8(00000000)                call        g_signal_connect_data
+    78                                  
+    79                                      ; Show main window instance
+    80 000000A7 488B3C25[00000000]          mov         rdi, qword [window.handle]
+    81 000000AF E8(00000000)                call        gtk_widget_show
+    82                                  
+    83 000000B4 E8(00000000)                call        gtk_main
+    84                                  
+    85                                  .L_exit:
+    86 000000B9 4831FF                      xor         rdi, rdi                  ; Exit code = 0
+    87 000000BC E8(00000000)                call        exit

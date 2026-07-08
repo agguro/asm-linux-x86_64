@@ -1,26 +1,8 @@
 /*
  **************************************************************************
  * Name         : arguments.s
+ * Author       : Roberto Adolfo Aguas Guerreiro (agguro)
  * Description  : Demonstrates process argument parsing in x86-64 Linux.
- *
- *
- * Build Sequence:
- * 1. Assemble Project Main:
- * /usr/bin/as --64 -g --noexecstack -I ../../../include \
- * -al=arguments.lst arguments.s -o arguments.o
- *
- * 2. Assemble Library Dependencies:
- * /usr/bin/as --64 -g --noexecstack -I ../../../include \
- * -al=strlen.lst ../../../lib/strlen.s -o strlen.o
- *
- * /usr/bin/as --64 -g --noexecstack -I ../../../include \
- * -al=u64toa.lst ../../../lib/u64toa.s -o u64toa.o
- *
- * 3. Link Executable (PIE enabled):
- * /usr/bin/ld -m elf_x86_64 -pie -z noexecstack \
- * --dynamic-linker /lib64/ld-linux-x86-64.so.2 -o arguments \
- * arguments.o strlen.o u64toa.o
- *
  *
  * Overview:
  * Unlike standard functions (where args are in registers), the Linux 

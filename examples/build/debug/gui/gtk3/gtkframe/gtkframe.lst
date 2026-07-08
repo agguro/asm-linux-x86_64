@@ -1,0 +1,205 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : gtkframe.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : GtkFrame examples demonstrating different shadow types
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .data
+    21 00000000 <bin 18C3h>                  logo:             incbin    "../resources/pictures/logo.png"
+    22                                       logo_size:        equ       $ - logo
+    23                                  
+    24                                       window:
+    25 000018C3 0000000000000000             .handle:          dq        0
+    26 000018CB 47746B4672616D6500           .title:           db        "GtkFrame", 0
+    27                                  
+    28                                       table:
+    29 000018D4 0000000000000000             .handle:          dq        0
+    30                                  
+    31                                       frame:
+    32 000018DC 0000000000000000             .handle:          dq        0
+    33                                  
+    34                                       frame1:
+    35 000018E4 00000000                     .shadow:          dd        0 ; GTK_SHADOW_IN
+    36 000018E8 536861646F7720496E-          .label:           db        "Shadow In", 0
+    36 000018F1 00                 
+    37                                  
+    38                                       frame2:
+    39 000018F2 02000000                     .shadow:          dd        2 ; GTK_SHADOW_OUT
+    40 000018F6 536861646F77204F75-          .label:           db        "Shadow Out", 0
+    40 000018FF 7400               
+    41                                  
+    42                                       frame3:
+    43 00001901 03000000                     .shadow:          dd        3 ; GTK_SHADOW_ETCHED_IN
+    44 00001905 536861646F77204574-          .label:           db        "Shadow Etched In", 0
+    44 0000190E 6368656420496E00   
+    45                                  
+    46                                       frame4:
+    47 00001916 04000000                     .shadow:          dd        4 ; GTK_SHADOW_ETCHED_OUT
+    48 0000191A 536861646F77204574-          .label:           db        "Shadow Etched Out", 0
+    48 00001923 63686564204F757400 
+    49                                  
+    50                                       signal:
+    51 0000192C 64657374726F7900             .destroy:         db        "destroy", 0
+    52                                  
+    53 00001934 0000000000000000             loader:           dq        0
+    54 0000193C 0000000000000000             pixbuffer:        dq        0
+    55                                  
+    56                                  section .text
+    57                                       global _start
+    58                                  
+    59                                  _start:
+    60                                       ; 1. Stack Alignment conform System V AMD64 ABI
+    61 00000000 488B3C24                     mov        rdi, [rsp]                ; argc
+    62 00000004 488D742408                   lea        rsi, [rsp + 8]            ; argv
+    63 00000009 4989FC                       mov        r12, rdi
+    64 0000000C 4989F5                       mov        r13, rsi
+    65                                  
+    66 0000000F 4883E4F0                     and        rsp, -16
+    67 00000013 4883EC10                     sub        rsp, 16
+    68 00000017 488D3C24                     lea        rdi, [rsp]
+    69 0000001B 4C8927                       mov        [rdi], r12
+    70 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    71 00000023 4C892E                       mov        [rsi], r13
+    72                                  
+    73 00000026 E8(00000000)                 call       gtk_init
+    74                                  
+    75                                       ; 2. Generate Pixbuf
+    76 0000002B E8(00000000)                 call       gdk_pixbuf_loader_new
+    77 00000030 48890425[34190000]           mov        qword [loader], rax
+    78 00000038 488B3C25[34190000]           mov        rdi, qword [loader]
+    79 00000040 48BE-                        mov        rsi, logo
+    79 00000042 [0000000000000000] 
+    80 0000004A BAC3180000                   mov        edx, logo_size
+    81 0000004F 4831C9                       xor        rcx, rcx
+    82 00000052 E8(00000000)                 call       gdk_pixbuf_loader_write
+    83 00000057 488B3C25[34190000]           mov        rdi, qword [loader]
+    84 0000005F E8(00000000)                 call       gdk_pixbuf_loader_get_pixbuf
+    85 00000064 48890425[3C190000]           mov        qword [pixbuffer], rax
+    86                                  
+    87                                       ; 3. Build Window
+    88 0000006C BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    89 00000071 E8(00000000)                 call       gtk_window_new
+    90 00000076 48890425[C3180000]           mov        qword [window.handle], rax
+    91                                  
+    92 0000007E 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    93 00000086 48BE-                        mov        rsi, window.title
+    93 00000088 [CB18000000000000] 
+    94 00000090 E8(00000000)                 call       gtk_window_set_title
+    95                                  
+    96 00000095 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+    97 0000009D BEF4010000                   mov        rsi, 500
+    98 000000A2 BA90010000                   mov        rdx, 400
+    99 000000A7 E8(00000000)                 call       gtk_window_set_default_size
+   100                                  
+   101 000000AC 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   102 000000B4 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+   103 000000B9 E8(00000000)                 call       gtk_window_set_position
+   104                                  
+   105 000000BE 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   106 000000C6 488B3425[3C190000]           mov        rsi, qword [pixbuffer]
+   107 000000CE E8(00000000)                 call       gtk_window_set_icon
+   108                                  
+   109 000000D3 4531C9                       xor        r9d, r9d
+   110 000000D6 4531C0                       xor        r8d, r8d
+   111 000000D9 4831C9                       xor        rcx, rcx
+   112 000000DC 48BA-                        mov        rdx, gtk_main_quit
+   112 000000DE [0000000000000000] 
+   113 000000E6 48BE-                        mov        rsi, signal.destroy
+   113 000000E8 [2C19000000000000] 
+   114 000000F0 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   115 000000F8 E8(00000000)                 call       g_signal_connect_data
+   116                                  
+   117                                       ; Create container grid
+   118 000000FD BF04000000                   mov        rdi, 4
+   119 00000102 BE04000000                   mov        rsi, 4
+   120 00000107 BA01000000                   mov        rdx, TRUE
+   121 0000010C E8(00000000)                 call       gtk_table_new
+   122 00000111 48890425[D4180000]           mov        qword [table.handle], rax
+   123                                  
+   124 00000119 488B3C25[D4180000]           mov        rdi, qword [table.handle]
+   125 00000121 BE0A000000                   mov        rsi, 10
+   126 00000126 E8(00000000)                 call       gtk_table_set_row_spacings
+   127 0000012B 488B3C25[D4180000]           mov        rdi, qword [table.handle]
+   128 00000133 BE0A000000                   mov        rsi, 10
+   129 00000138 E8(00000000)                 call       gtk_table_set_col_spacings
+   130                                  
+   131 0000013D 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   132 00000145 488B3425[D4180000]           mov        rsi, qword [table.handle]
+   133 0000014D E8(00000000)                 call       gtk_container_add
+   134                                  
+   135                                       ; 4. Instantiate Frames
+   136                                       ; Frame 1
+   137 00000152 48BF-                        mov        rdi, frame1.label
+   137 00000154 [E818000000000000] 
+   138 0000015C E8(00000000)                 call       gtk_frame_new
+   139 00000161 48890425[DC180000]           mov        qword [frame.handle], rax
+   140 00000169 488B3C25[DC180000]           mov        rdi, qword [frame.handle]
+   141 00000171 8B3425[E4180000]             mov        esi, dword [frame1.shadow]
+   142 00000178 E8(00000000)                 call       gtk_frame_set_shadow_type
+   143 0000017D 488B3C25[D4180000]           mov        rdi, qword [table.handle]
+   144 00000185 488B3425[DC180000]           mov        rsi, qword [frame.handle]
+   145 0000018D BA01000000                   mov        rdx, 1
+   146 00000192 B902000000                   mov        rcx, 2
+   147 00000197 41B801000000                 mov        r8, 1
+   148 0000019D 41B902000000                 mov        r9, 2
+   149 000001A3 E8(00000000)                 call       gtk_table_attach_defaults
+   150                                  
+   151                                       ; Frame 2
+   152 000001A8 48BF-                        mov        rdi, frame2.label
+   152 000001AA [F618000000000000] 
+   153 000001B2 E8(00000000)                 call       gtk_frame_new
+   154 000001B7 48890425[DC180000]           mov        qword [frame.handle], rax
+   155 000001BF 488B3C25[DC180000]           mov        rdi, qword [frame.handle]
+   156 000001C7 8B3425[F2180000]             mov        esi, dword [frame2.shadow]
+   157 000001CE E8(00000000)                 call       gtk_frame_set_shadow_type
+   158 000001D3 488B3C25[D4180000]           mov        rdi, qword [table.handle]
+   159 000001DB 488B3425[DC180000]           mov        rsi, qword [frame.handle]
+   160 000001E3 BA02000000                   mov        rdx, 2
+   161 000001E8 B903000000                   mov        rcx, 3
+   162 000001ED 41B801000000                 mov        r8, 1
+   163 000001F3 41B902000000                 mov        r9, 2
+   164 000001F9 E8(00000000)                 call       gtk_table_attach_defaults
+   165                                  
+   166                                       ; Frame 3
+   167 000001FE 48BF-                        mov        rdi, frame3.label
+   167 00000200 [0519000000000000] 
+   168 00000208 E8(00000000)                 call       gtk_frame_new
+   169 0000020D 48890425[DC180000]           mov        qword [frame.handle], rax
+   170 00000215 488B3C25[DC180000]           mov        rdi, qword [frame.handle]
+   171 0000021D 8B3425[01190000]             mov        esi, dword [frame3.shadow]
+   172 00000224 E8(00000000)                 call       gtk_frame_set_shadow_type
+   173 00000229 488B3C25[D4180000]           mov        rdi, qword [table.handle]
+   174 00000231 488B3425[DC180000]           mov        rsi, qword [frame.handle]
+   175 00000239 BA01000000                   mov        rdx, 1
+   176 0000023E B902000000                   mov        rcx, 2
+   177 00000243 41B802000000                 mov        r8, 2
+   178 00000249 41B903000000                 mov        r9, 3
+   179 0000024F E8(00000000)                 call       gtk_table_attach_defaults
+   180                                  
+   181                                       ; Frame 4
+   182 00000254 48BF-                        mov        rdi, frame4.label
+   182 00000256 [1A19000000000000] 
+   183 0000025E E8(00000000)                 call       gtk_frame_new
+   184 00000263 48890425[DC180000]           mov        qword [frame.handle], rax
+   185 0000026B 488B3C25[DC180000]           mov        rdi, qword [frame.handle]
+   186 00000273 8B3425[16190000]             mov        esi, dword [frame4.shadow]
+   187 0000027A E8(00000000)                 call       gtk_frame_set_shadow_type
+   188 0000027F 488B3C25[D4180000]           mov        rdi, qword [table.handle]
+   189 00000287 488B3425[DC180000]           mov        rsi, qword [frame.handle]
+   190 0000028F BA02000000                   mov        rdx, 2
+   191 00000294 B903000000                   mov        rcx, 3
+   192 00000299 41B802000000                 mov        r8, 2
+   193 0000029F 41B903000000                 mov        r9, 3
+   194 000002A5 E8(00000000)                 call       gtk_table_attach_defaults
+   195                                  
+   196 000002AA 488B3C25[C3180000]           mov        rdi, qword [window.handle]
+   197 000002B2 E8(00000000)                 call       gtk_widget_show_all
+   198 000002B7 E8(00000000)                 call       gtk_main
+   199                                  
+   200 000002BC 4831FF                       xor        rdi, rdi
+   201 000002BF E8(00000000)                 call       exit

@@ -1,0 +1,255 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : aboutbox.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Derived From: ZetCode GTK3 Examples
+     5                                  ; Description : An aboutbox example with a centered text label
+     6                                  ; ABI Status  : Stack-aligned (Original working configuration)
+     7                                  ; ==============================================================================
+     8                                  
+     9                                  bits 64
+    10                                  
+    11                                  [list -]
+    20                                  
+    21                                  section .data
+    22 00000000 <bin 18C3h>                  logo:           incbin    "../resources/pictures/logo.png"
+    23                                       .size:          equ       $ - logo
+    24 000018C3 <bin 802Fh>                  picture:        incbin    "../resources/pictures/picture.png"
+    25                                       .size:          equ       $ - picture
+    26                                  
+    27                                       window:
+    28 000098F2 0000000000000000             .handle:        dq        0
+    29 000098FA 41626F757420626F78-          .title:         db        "About box example",0
+    29 00009903 206578616D706C6500 
+    30                                  
+    31                                       box:
+    32 0000990C 0000000000000000             .handle:        dq        0
+    33                                  
+    34                                       label:
+    35 00009914 0000000000000000             .handle:        dq        0
+    36 0000991C 636C69636B20686572-          .text:          db        "click here",0
+    36 00009925 6500               
+    37                                  
+    38                                       signal:
+    39 00009927 64657374726F7900             .destroy:       db        "destroy",0
+    40 0000992F 627574746F6E2D7072-          .buttonpress:   db        "button-press-event",0
+    40 00009938 6573732D6576656E74-
+    40 00009941 00                 
+    41                                  
+    42                                       dialog:
+    43 00009942 41626F757420746869-          .title:         db        "About this example",0
+    43 0000994B 73206578616D706C65-
+    43 00009954 00                 
+    44 00009955 312E30202D2064656D-          .version:       db        "1.0 - demo",0
+    44 0000995E 6F00               
+    45 00009960 286329206167677572-          .copyright:     db        "(c) agguro - 2015",0
+    45 00009969 6F202D203230313500 
+    46 00009972 546869732069732061-          .comments:      db        "This is an example to create an about dialogbox",0
+    46 0000997B 6E206578616D706C65-
+    46 00009984 20746F206372656174-
+    46 0000998D 6520616E2061626F75-
+    46 00009996 74206469616C6F6762-
+    46 0000999F 6F7800             
+    47 000099A2 68747470733A2F2F67-          .website:       db        "https://github.com/agguro",0
+    47 000099AB 69746875622E636F6D-
+    47 000099B4 2F61676775726F00   
+    48                                  
+    49 000099BC 0000000000000000             loader:         dq        0
+    50                                       pixbuffer:
+    51 000099C4 0000000000000000             .icon:          dq        0
+    52 000099CC 0000000000000000             .image:         dq        0
+    53                                  
+    54                                  section .text
+    55                                          global _start
+    56                                  
+    57                                  _start:
+    58                                       ; 1. Stack Alignment & GTK3 Init
+    59 00000000 488B3C24                     mov      rdi, [rsp]                ; argc
+    60 00000004 488D742408                   lea      rsi, [rsp + 8]            ; argv
+    61 00000009 4989FC                       mov      r12, rdi
+    62 0000000C 4989F5                       mov      r13, rsi
+    63                                  
+    64 0000000F 4883E4F0                     and      rsp, -16
+    65 00000013 4883EC10                     sub      rsp, 16
+    66 00000017 488D3C24                     lea      rdi, [rsp]
+    67 0000001B 4C8927                       mov      [rdi], r12
+    68 0000001E 488D742408                   lea      rsi, [rsp + 8]
+    69 00000023 4C892E                       mov      [rsi], r13
+    70 00000026 E8(00000000)                 call     gtk_init
+    71                                  
+    72                                       ; 2. Main Window Configuration
+    73 0000002B BF00000000                   mov      rdi, GTK_WINDOW_TOPLEVEL
+    74 00000030 E8(00000000)                 call     gtk_window_new
+    75 00000035 48890425[F2980000]           mov      qword [window.handle], rax
+    76                                  
+    77 0000003D 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+    78 00000045 BE01000000                   mov      rsi, GTK_WIN_POS_CENTER
+    79 0000004A E8(00000000)                 call     gtk_window_set_position
+    80                                  
+    81 0000004F 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+    82 00000057 BEDC000000                   mov      rsi, 220
+    83 0000005C BA96000000                   mov      rdx, 150
+    84 00000061 E8(00000000)                 call     gtk_window_set_default_size
+    85                                  
+    86 00000066 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+    87 0000006E 48BE-                        mov      rsi, window.title
+    87 00000070 [FA98000000000000] 
+    88 00000078 E8(00000000)                 call     gtk_window_set_title
+    89                                  
+    90 0000007D 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+    91 00000085 BE0F000000                   mov      rsi, 15
+    92 0000008A E8(00000000)                 call     gtk_container_set_border_width
+    93                                  
+    94 0000008F 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+    95 00000097 BE00010000                   mov      rsi, GDK_BUTTON_PRESS_MASK
+    96 0000009C E8(00000000)                 call     gtk_widget_add_events
+    97                                  
+    98                                       ; 3. Centered Label Integration
+    99 000000A1 BF01000000                   mov      rdi, GTK_ORIENTATION_VERTICAL
+   100 000000A6 4831F6                       xor      rsi, rsi
+   101 000000A9 E8(00000000)                 call     gtk_box_new
+   102 000000AE 48890425[0C990000]           mov      qword [box.handle], rax
+   103                                  
+   104 000000B6 488B3C25[0C990000]           mov      rdi, qword [box.handle]
+   105 000000BE BE03000000                   mov      rsi, GTK_ALIGN_CENTER
+   106 000000C3 E8(00000000)                 call     gtk_widget_set_halign
+   107                                  
+   108 000000C8 488B3C25[0C990000]           mov      rdi, qword [box.handle]
+   109 000000D0 BE03000000                   mov      rsi, GTK_ALIGN_CENTER
+   110 000000D5 E8(00000000)                 call     gtk_widget_set_valign
+   111                                  
+   112 000000DA 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+   113 000000E2 488B3425[0C990000]           mov      rsi, qword [box.handle]
+   114 000000EA E8(00000000)                 call     gtk_container_add
+   115                                  
+   116 000000EF 48BF-                        mov      rdi, label.text
+   116 000000F1 [1C99000000000000] 
+   117 000000F9 E8(00000000)                 call     gtk_label_new
+   118 000000FE 48890425[14990000]           mov      qword [label.handle], rax
+   119                                  
+   120 00000106 488B3C25[0C990000]           mov      rdi, qword [box.handle]
+   121 0000010E 488B3425[14990000]           mov      rsi, qword [label.handle]
+   122 00000116 4831D2                       xor      rdx, rdx
+   123 00000119 4831C9                       xor      rcx, rcx
+   124 0000011C 4531C0                       xor      r8d, r8d
+   125 0000011F E8(00000000)                 call     gtk_box_pack_start
+   126                                  
+   127                                       ; 4. Load Main Application Icon
+   128 00000124 E8(00000000)                 call     gdk_pixbuf_loader_new
+   129 00000129 48890425[BC990000]           mov      qword [loader], rax
+   130                                  
+   131 00000131 488B3C25[BC990000]           mov      rdi, qword [loader]
+   132 00000139 48BE-                        mov      rsi, logo
+   132 0000013B [0000000000000000] 
+   133 00000143 BAC3180000                   mov      edx, logo.size
+   134 00000148 4831C9                       xor      rcx, rcx
+   135 0000014B E8(00000000)                 call     gdk_pixbuf_loader_write
+   136                                  
+   137 00000150 488B3C25[BC990000]           mov      rdi, qword [loader]
+   138 00000158 E8(00000000)                 call     gdk_pixbuf_loader_get_pixbuf
+   139 0000015D 48890425[C4990000]           mov      qword [pixbuffer.icon], rax
+   140                                  
+   141 00000165 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+   142 0000016D 488B3425[C4990000]           mov      rsi, qword [pixbuffer.icon]
+   143 00000175 E8(00000000)                 call     gtk_window_set_icon
+   144                                  
+   145                                       ; 5. Signal Handlers
+   146 0000017A 4531C9                       xor      r9d, r9d
+   147 0000017D 4531C0                       xor      r8d, r8d
+   148 00000180 488B0C25[F2980000]           mov      rcx, qword [window.handle]
+   149 00000188 48BA-                        mov      rdx, show_about
+   149 0000018A [ED01000000000000] 
+   150 00000192 48BE-                        mov      rsi, signal.buttonpress
+   150 00000194 [2F99000000000000] 
+   151 0000019C 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+   152 000001A4 E8(00000000)                 call     g_signal_connect_data
+   153                                  
+   154 000001A9 4531C9                       xor      r9d, r9d
+   155 000001AC 4531C0                       xor      r8d, r8d
+   156 000001AF 4831C9                       xor      rcx, rcx
+   157 000001B2 48BA-                        mov      rdx, gtk_main_quit
+   157 000001B4 [0000000000000000] 
+   158 000001BC 48BE-                        mov      rsi, signal.destroy
+   158 000001BE [2799000000000000] 
+   159 000001C6 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+   160 000001CE E8(00000000)                 call     g_signal_connect_data
+   161                                  
+   162                                       ; 6. Execution Loop
+   163 000001D3 488B3C25[F2980000]           mov      rdi, qword [window.handle]
+   164 000001DB E8(00000000)                 call     gtk_widget_show_all
+   165 000001E0 E8(00000000)                 call     gtk_main
+   166                                  
+   167                                  .L_exit:
+   168 000001E5 4831FF                       xor      rdi, rdi
+   169 000001E8 E8(00000000)                 call     exit
+   170                                  
+   171                                  ; Callback: show_about
+   172                                  show_about:
+   173 000001ED 55                           push     rbp
+   174 000001EE 4889E5                       mov      rbp, rsp
+   175 000001F1 4154                         push     r12
+   176 000001F3 4883E4F0                     and      rsp, -16
+   177                                  
+   178 000001F7 E8(00000000)                 call     gdk_pixbuf_loader_new
+   179 000001FC 48890425[BC990000]           mov      qword [loader], rax
+   180                                  
+   181 00000204 488B3C25[BC990000]           mov      rdi, qword [loader]
+   182 0000020C 48BE-                        mov      rsi, picture
+   182 0000020E [C318000000000000] 
+   183 00000216 BA2F800000                   mov      edx, picture.size
+   184 0000021B 4831C9                       xor      rcx, rcx
+   185 0000021E E8(00000000)                 call     gdk_pixbuf_loader_write
+   186                                  
+   187 00000223 488B3C25[BC990000]           mov      rdi, qword [loader]
+   188 0000022B E8(00000000)                 call     gdk_pixbuf_loader_get_pixbuf
+   189 00000230 48890425[CC990000]           mov      qword [pixbuffer.image], rax
+   190                                  
+   191 00000238 E8(00000000)                 call     gtk_about_dialog_new
+   192 0000023D 4989C4                       mov      r12, rax
+   193                                  
+   194 00000240 4C89E7                       mov      rdi, r12
+   195 00000243 488B3425[F2980000]           mov      rsi, qword [window.handle]
+   196 0000024B E8(00000000)                 call     gtk_window_set_transient_for
+   197                                  
+   198 00000250 4C89E7                       mov      rdi, r12
+   199 00000253 48BE-                        mov      rsi, dialog.title
+   199 00000255 [4299000000000000] 
+   200 0000025D E8(00000000)                 call     gtk_about_dialog_set_program_name
+   201                                  
+   202 00000262 4C89E7                       mov      rdi, r12
+   203 00000265 48BE-                        mov      rsi, dialog.version
+   203 00000267 [5599000000000000] 
+   204 0000026F E8(00000000)                 call     gtk_about_dialog_set_version
+   205                                  
+   206 00000274 4C89E7                       mov      rdi, r12
+   207 00000277 48BE-                        mov      rsi, dialog.copyright
+   207 00000279 [6099000000000000] 
+   208 00000281 E8(00000000)                 call     gtk_about_dialog_set_copyright
+   209                                  
+   210 00000286 4C89E7                       mov      rdi, r12
+   211 00000289 48BE-                        mov      rsi, dialog.comments
+   211 0000028B [7299000000000000] 
+   212 00000293 E8(00000000)                 call     gtk_about_dialog_set_comments
+   213                                  
+   214 00000298 4C89E7                       mov      rdi, r12
+   215 0000029B 48BE-                        mov      rsi, dialog.website
+   215 0000029D [A299000000000000] 
+   216 000002A5 E8(00000000)                 call     gtk_about_dialog_set_website
+   217                                  
+   218 000002AA 4C89E7                       mov      rdi, r12
+   219 000002AD 488B3425[CC990000]           mov      rsi, qword [pixbuffer.image]
+   220 000002B5 E8(00000000)                 call     gtk_about_dialog_set_logo
+   221                                  
+   222 000002BA 4C89E7                       mov      rdi, r12
+   223 000002BD 488B3425[C4990000]           mov      rsi, qword [pixbuffer.icon]
+   224 000002C5 E8(00000000)                 call     gtk_window_set_icon
+   225                                  
+   226 000002CA 4C89E7                       mov      rdi, r12
+   227 000002CD E8(00000000)                 call     gtk_dialog_run
+   228                                  
+   229 000002D2 4C89E7                       mov      rdi, r12
+   230 000002D5 E8(00000000)                 call     gtk_widget_destroy
+   231                                  
+   232 000002DA B801000000                   mov      rax, 1
+   233 000002DF 415C                         pop      r12
+   234 000002E1 C9                           leave
+   235 000002E2 C3                           ret

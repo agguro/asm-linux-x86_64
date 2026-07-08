@@ -1,0 +1,267 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : gtkiconview.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : GtkIconView with dynamically downsampled 48x48 icons
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  section .bss
+    21                                       window:
+    22 00000000 ????????????????             .handle:          resq      1
+    23                                       
+    24                                       app:
+    25 00000008 ????????????????             .loader:          resq      1
+    26 00000010 ????????????????             .pixbuffer:       resq      1
+    27                                       
+    28                                       list:
+    29 00000018 ????????????????             .store:           resq      1
+    30 00000020 ????????????????             .view:            resq      1
+    31 00000028 ????????????????             .scroll:          resq      1
+    32 00000030 <res 20h>                    .iter:            resb      32
+    33                                       
+    34                                       gtype:
+    35 00000050 ????????????????             .pixbuf:          resq      1
+    36 00000058 <res 10h>                    .columns:         resq      2
+    37                                       
+    38                                       gval:
+    39 00000068 <res 18h>                    .pixbuf:          resb      24
+    40 00000080 <res 18h>                    .string:          resb      24
+    41                                  
+    42                                       tmp:
+    43 00000098 ????????????????             .string_ptr:      resq      1
+    44 000000A0 ????????????????             .pixbuf_ptr:      resq      1
+    45                                  
+    46                                  section .data
+    47 00000000 <bin 18C3h>                  logo:             incbin    "../resources/pictures/logo.png"
+    48                                       logo_size:        equ       $ - logo
+    49                                  
+    50 000018C3 4C696E757820446973-          window_title:     db        "Linux Distributions Grid", 0
+    50 000018CC 747269627574696F6E-
+    50 000018D5 73204772696400     
+    51                                       signal:
+    52 000018DC 64657374726F7900             .destroy:         db        "destroy", 0
+    53                                  
+    54 000018E4 <bin 191Fh>                  img_debian:       incbin    "../resources/pictures/debian.png"
+    55                                       img_debian_sz:    equ       $ - img_debian
+    56 00003203 <bin 3979Dh>                 img_mint:         incbin    "../resources/pictures/mint.png"
+    57                                       img_mint_sz:      equ       $ - img_mint
+    58 0003C9A0 <bin 21C5h>                  img_fedora:       incbin    "../resources/pictures/fedora.png"
+    59                                       img_fedora_sz:    equ       $ - img_fedora
+    60 0003EB65 <bin 4571h>                  img_arch:         incbin    "../resources/pictures/arch.png"
+    61                                       img_arch_sz:      equ       $ - img_arch
+    62                                  
+    63                                       distro:
+    64 000430D6 4C696E757820446562-          .debian:          db        "Linux Debian 13", 0
+    64 000430DF 69616E20313300     
+    65 000430E6 4C696E7578204D696E-          .mint:            db        "Linux Mint LMDE", 0
+    65 000430EF 74204C4D444500     
+    66 000430F6 4665646F726100               .fedora:          db        "Fedora", 0
+    67 000430FD 41726368204C696E75-          .arch:            db        "Arch Linux", 0
+    67 00043106 7800               
+    68                                  
+    69                                  section .text
+    70                                       global _start
+    71                                  
+    72                                  _start:
+    73                                       ; 1. Stack Alignment & GTK3 Init
+    74 00000000 488B3C24                     mov        rdi, [rsp]
+    75 00000004 488D742408                   lea        rsi, [rsp + 8]
+    76 00000009 4989FC                       mov        r12, rdi
+    77 0000000C 4989F5                       mov        r13, rsi
+    78                                  
+    79 0000000F 4883E4F0                     and        rsp, -16
+    80 00000013 4883EC10                     sub        rsp, 16
+    81 00000017 488D3C24                     lea        rdi, [rsp]
+    82 0000001B 4C8927                       mov        [rdi], r12
+    83 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    84 00000023 4C892E                       mov        [rsi], r13
+    85 00000026 E8(00000000)                 call       gtk_init
+    86                                  
+    87                                       ; 2. Fetch GDK Pixbuf Type
+    88 0000002B 31C0                         xor        eax, eax
+    89 0000002D E8(00000000)                 call       gdk_pixbuf_get_type
+    90 00000032 48890425[50000000]           mov        qword [gtype.pixbuf], rax
+    91                                  
+    92                                       ; 3. Generate Main Window Icon
+    93 0000003A E8(00000000)                 call       gdk_pixbuf_loader_new
+    94 0000003F 48890425[08000000]           mov        qword [app.loader], rax
+    95 00000047 488B3C25[08000000]           mov        rdi, qword [app.loader]
+    96 0000004F 48BE-                        mov        rsi, logo
+    96 00000051 [0000000000000000] 
+    97 00000059 BAC3180000                   mov        rdx, logo_size
+    98 0000005E 4831C9                       xor        rcx, rcx
+    99 00000061 E8(00000000)                 call       gdk_pixbuf_loader_write
+   100 00000066 488B3C25[08000000]           mov        rdi, qword [app.loader]
+   101 0000006E E8(00000000)                 call       gdk_pixbuf_loader_get_pixbuf
+   102 00000073 48890425[10000000]           mov        qword [app.pixbuffer], rax
+   103                                  
+   104                                       ; 4. Build Window
+   105 0000007B BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+   106 00000080 E8(00000000)                 call       gtk_window_new
+   107 00000085 48890425[00000000]           mov        qword [window.handle], rax
+   108                                  
+   109 0000008D 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   110 00000095 48BE-                        mov        rsi, window_title
+   110 00000097 [C318000000000000] 
+   111 0000009F E8(00000000)                 call       gtk_window_set_title
+   112 000000A4 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   113 000000AC BE58020000                   mov        rsi, 600
+   114 000000B1 BA90010000                   mov        rdx, 400
+   115 000000B6 E8(00000000)                 call       gtk_window_set_default_size
+   116 000000BB 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   117 000000C3 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+   118 000000C8 E8(00000000)                 call       gtk_window_set_position
+   119 000000CD 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   120 000000D5 488B3425[10000000]           mov        rsi, qword [app.pixbuffer]
+   121 000000DD E8(00000000)                 call       gtk_window_set_icon
+   122                                  
+   123 000000E2 4531C9                       xor        r9d, r9d
+   124 000000E5 4531C0                       xor        r8d, r8d
+   125 000000E8 4831C9                       xor        rcx, rcx
+   126 000000EB 48BA-                        mov        rdx, gtk_main_quit
+   126 000000ED [0000000000000000] 
+   127 000000F5 48BE-                        mov        rsi, signal.destroy
+   127 000000F7 [DC18000000000000] 
+   128 000000FF 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   129 00000107 E8(00000000)                 call       g_signal_connect_data
+   130                                  
+   131                                       ; 5. Data Model
+   132 0000010C 488B0425[50000000]           mov        rax, qword [gtype.pixbuf]
+   133 00000114 48890425[58000000]           mov        qword [gtype.columns], rax
+   134 0000011C 48C70425[60000000]-          mov        qword [gtype.columns + 8], 64 ; G_TYPE_STRING
+   134 00000124 40000000           
+   135                                  
+   136 00000128 BF02000000                   mov        rdi, 2
+   137 0000012D 488D3425[58000000]           lea        rsi, [gtype.columns]
+   138 00000135 31C0                         xor        eax, eax
+   139 00000137 E8(00000000)                 call       gtk_list_store_newv
+   140 0000013C 48890425[18000000]           mov        qword [list.store], rax
+   141                                  
+   142                                       ; 6. Populate Rows
+   143 00000144 48BF-                        mov        rdi, img_debian
+   143 00000146 [E418000000000000] 
+   144 0000014E BE1F190000                   mov        rsi, img_debian_sz
+   145 00000153 48BA-                        mov        rdx, distro.debian
+   145 00000155 [D630040000000000] 
+   146 0000015D E8ED000000                   call       add_distro_row
+   147 00000162 48BF-                        mov        rdi, img_mint
+   147 00000164 [0332000000000000] 
+   148 0000016C BE9D970300                   mov        rsi, img_mint_sz
+   149 00000171 48BA-                        mov        rdx, distro.mint
+   149 00000173 [E630040000000000] 
+   150 0000017B E8CF000000                   call       add_distro_row
+   151 00000180 48BF-                        mov        rdi, img_fedora
+   151 00000182 [A0C9030000000000] 
+   152 0000018A BEC5210000                   mov        rsi, img_fedora_sz
+   153 0000018F 48BA-                        mov        rdx, distro.fedora
+   153 00000191 [F630040000000000] 
+   154 00000199 E8B1000000                   call       add_distro_row
+   155 0000019E 48BF-                        mov        rdi, img_arch
+   155 000001A0 [65EB030000000000] 
+   156 000001A8 BE71450000                   mov        rsi, img_arch_sz
+   157 000001AD 48BA-                        mov        rdx, distro.arch
+   157 000001AF [FD30040000000000] 
+   158 000001B7 E893000000                   call       add_distro_row
+   159                                  
+   160                                       ; 7. View Construction
+   161 000001BC BF00000000                   mov        rdi, NULL
+   162 000001C1 BE00000000                   mov        rsi, NULL
+   163 000001C6 E8(00000000)                 call       gtk_scrolled_window_new
+   164 000001CB 48890425[28000000]           mov        qword [list.scroll], rax
+   165                                  
+   166 000001D3 488B3C25[18000000]           mov        rdi, qword [list.store]
+   167 000001DB 31C0                         xor        eax, eax
+   168 000001DD E8(00000000)                 call       gtk_icon_view_new_with_model
+   169 000001E2 48890425[20000000]           mov        qword [list.view], rax
+   170                                  
+   171 000001EA 488B3C25[20000000]           mov        rdi, qword [list.view]
+   172 000001F2 BE00000000                   mov        rsi, 0
+   173 000001F7 E8(00000000)                 call       gtk_icon_view_set_pixbuf_column
+   174 000001FC 488B3C25[20000000]           mov        rdi, qword [list.view]
+   175 00000204 BE01000000                   mov        rsi, 1
+   176 00000209 E8(00000000)                 call       gtk_icon_view_set_text_column
+   177                                  
+   178 0000020E 488B3C25[28000000]           mov        rdi, qword [list.scroll]
+   179 00000216 488B3425[20000000]           mov        rsi, qword [list.view]
+   180 0000021E E8(00000000)                 call       gtk_container_add
+   181 00000223 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   182 0000022B 488B3425[28000000]           mov        rsi, qword [list.scroll]
+   183 00000233 E8(00000000)                 call       gtk_container_add
+   184                                  
+   185 00000238 488B3C25[00000000]           mov        rdi, qword [window.handle]
+   186 00000240 E8(00000000)                 call       gtk_widget_show_all
+   187 00000245 E8(00000000)                 call       gtk_main
+   188 0000024A E8(00000000)                 call       exit
+   189                                  
+   190                                  add_distro_row:
+   191 0000024F 55                           push       rbp
+   192 00000250 4889E5                       mov        rbp, rsp
+   193 00000253 4883E4F0                     and        rsp, -16
+   194 00000257 48891425[98000000]           mov        qword [tmp.string_ptr], rdx
+   195 0000025F 57                           push       rdi
+   196 00000260 56                           push       rsi
+   197 00000261 E8(00000000)                 call       gdk_pixbuf_loader_new
+   198 00000266 4989C6                       mov        r14, rax
+   199 00000269 5A                           pop        rdx
+   200 0000026A 5E                           pop        rsi
+   201 0000026B 4C89F7                       mov        rdi, r14
+   202 0000026E 4831C9                       xor        rcx, rcx
+   203 00000271 E8(00000000)                 call       gdk_pixbuf_loader_write
+   204 00000276 4C89F7                       mov        rdi, r14
+   205 00000279 E8(00000000)                 call       gdk_pixbuf_loader_get_pixbuf
+   206 0000027E 4989C7                       mov        r15, rax
+   207 00000281 4C89FF                       mov        rdi, r15
+   208 00000284 BE30000000                   mov        rsi, 48
+   209 00000289 BA30000000                   mov        rdx, 48
+   210 0000028E B902000000                   mov        rcx, 2
+   211 00000293 E8(00000000)                 call       gdk_pixbuf_scale_simple
+   212 00000298 48890425[A0000000]           mov        qword [tmp.pixbuf_ptr], rax
+   213                                  
+   214 000002A0 4831C0                       xor        rax, rax
+   215 000002A3 48890425[68000000]           mov        qword [gval.pixbuf], rax
+   216 000002AB 48890425[70000000]           mov        qword [gval.pixbuf + 8], rax
+   217 000002B3 48890425[78000000]           mov        qword [gval.pixbuf + 16], rax
+   218 000002BB 48890425[80000000]           mov        qword [gval.string], rax
+   219 000002C3 48890425[88000000]           mov        qword [gval.string + 8], rax
+   220 000002CB 48890425[90000000]           mov        qword [gval.string + 16], rax
+   221                                  
+   222 000002D3 488B3C25[18000000]           mov        rdi, qword [list.store]
+   223 000002DB 488D3425[30000000]           lea        rsi, [list.iter]
+   224 000002E3 E8(00000000)                 call       gtk_list_store_append
+   225                                  
+   226 000002E8 488D3C25[68000000]           lea        rdi, [gval.pixbuf]
+   227 000002F0 488B3425[50000000]           mov        rsi, qword [gtype.pixbuf]
+   228 000002F8 31C0                         xor        eax, eax
+   229 000002FA E8(00000000)                 call       g_value_init
+   230 000002FF 488D3C25[68000000]           lea        rdi, [gval.pixbuf]
+   231 00000307 488B3425[A0000000]           mov        rsi, qword [tmp.pixbuf_ptr]
+   232 0000030F E8(00000000)                 call       g_value_set_object
+   233 00000314 488B3C25[18000000]           mov        rdi, qword [list.store]
+   234 0000031C 488D3425[30000000]           lea        rsi, [list.iter]
+   235 00000324 BA00000000                   mov        edx, 0
+   236 00000329 488D0C25[68000000]           lea        rcx, [gval.pixbuf]
+   237 00000331 E8(00000000)                 call       gtk_list_store_set_value
+   238                                  
+   239 00000336 488D3C25[80000000]           lea        rdi, [gval.string]
+   240 0000033E BE40000000                   mov        rsi, 64
+   241 00000343 31C0                         xor        eax, eax
+   242 00000345 E8(00000000)                 call       g_value_init
+   243 0000034A 488D3C25[80000000]           lea        rdi, [gval.string]
+   244 00000352 488B3425[98000000]           mov        rsi, qword [tmp.string_ptr]
+   245 0000035A E8(00000000)                 call       g_value_set_string
+   246 0000035F 488B3C25[18000000]           mov        rdi, qword [list.store]
+   247 00000367 488D3425[30000000]           lea        rsi, [list.iter]
+   248 0000036F BA01000000                   mov        edx, 1
+   249 00000374 488D0C25[80000000]           lea        rcx, [gval.string]
+   250 0000037C E8(00000000)                 call       gtk_list_store_set_value
+   251                                  
+   252 00000381 488D3C25[68000000]           lea        rdi, [gval.pixbuf]
+   253 00000389 E8(00000000)                 call       g_value_unset
+   254 0000038E 488D3C25[80000000]           lea        rdi, [gval.string]
+   255 00000396 E8(00000000)                 call       g_value_unset
+   256 0000039B C9                           leave
+   257 0000039C C3                           ret

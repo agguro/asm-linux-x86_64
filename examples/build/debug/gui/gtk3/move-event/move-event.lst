@@ -1,0 +1,142 @@
+     1                                  ; ==============================================================================
+     2                                  ; Name        : move-event.asm
+     3                                  ; Author      : Roberto Aguas Guerreiro [agguro]
+     4                                  ; Description : Observing and displaying window dimensions and positions
+     5                                  ; ABI Status  : Compliant (Stack-aligned, Callee-saved preserved)
+     6                                  ; ==============================================================================
+     7                                  
+     8                                  bits 64
+     9                                  
+    10                                  [list -]
+    19                                  
+    20                                  struc GdkEventConfigure
+    21 00000000 ????????                     .type:         resd      1
+    22 00000004 ????????                     .padding0:     resd      1
+    23 00000008 ????????????????             .window:       resq      1
+    24 00000010 ??                           .send_event:   resb      1
+    25 00000011 ??????                       .padding1:     resb      3
+    26 00000014 ????????                     .x:            resd      1
+    27 00000018 ????????                     .y:            resd      1
+    28 0000001C ????????                     .width:        resd      1
+    29 00000020 ????????                     .height:       resd      1
+    30                                  endstruc
+    31                                  
+    32                                  section .data
+    33                                       mainwindow:
+    34 00000000 0000000000000000             .handle:       dq        0
+    35 00000008 53696D706C6500               .title:        db        "Simple", 0
+    36                                  
+    37                                       signal:
+    38 0000000F 64657374726F7900             .destroy:      db        "destroy", 0
+    39 00000017 636F6E666967757265-          .configure:    db        "configure-event", 0
+    39 00000020 2D6576656E7400     
+    40                                  
+    41                                       message:
+    42 00000027 6C6566743A2025642C-          .format:       db        "left: %d, top: %d, width: %d, height: %d", 0
+    42 00000030 20746F703A2025642C-
+    42 00000039 2077696474683A2025-
+    42 00000042 642C20686569676874-
+    42 0000004B 3A20256400         
+    43 00000050 00<rep 80h>                  .buffer:       times 128 db 0
+    44                                  
+    45                                  section .text
+    46                                       global _start
+    47                                  
+    48                                  _start:
+    49                                       ; 1. Stack Alignment conform System V AMD64 ABI
+    50 00000000 488B3C24                     mov        rdi, [rsp]
+    51 00000004 488D742408                   lea        rsi, [rsp + 8]
+    52 00000009 4989FC                       mov        r12, rdi
+    53 0000000C 4989F5                       mov        r13, rsi
+    54                                  
+    55 0000000F 4883E4F0                     and        rsp, -16
+    56 00000013 4883EC10                     sub        rsp, 16
+    57 00000017 488D3C24                     lea        rdi, [rsp]
+    58 0000001B 4C8927                       mov        [rdi], r12
+    59 0000001E 488D742408                   lea        rsi, [rsp + 8]
+    60 00000023 4C892E                       mov        [rsi], r13
+    61                                  
+    62 00000026 E8(00000000)                 call       gtk_init
+    63                                  
+    64                                       ; 2. Build Window
+    65 0000002B BF00000000                   mov        rdi, GTK_WINDOW_TOPLEVEL
+    66 00000030 E8(00000000)                 call       gtk_window_new
+    67 00000035 48890425[00000000]           mov        qword [mainwindow.handle], rax
+    68                                  
+    69 0000003D 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+    70 00000045 48BE-                        mov        rsi, mainwindow.title
+    70 00000047 [0800000000000000] 
+    71 0000004F E8(00000000)                 call       gtk_window_set_title
+    72 00000054 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+    73 0000005C BEF4010000                   mov        rsi, 500
+    74 00000061 BA2C010000                   mov        rdx, 300
+    75 00000066 E8(00000000)                 call       gtk_window_set_default_size
+    76 0000006B 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+    77 00000073 BE01000000                   mov        rsi, GTK_WIN_POS_CENTER
+    78 00000078 E8(00000000)                 call       gtk_window_set_position
+    79                                  
+    80 0000007D 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+    81 00000085 BE02000000                   mov        rsi, 1 << 1 ; GDK_STRUCTURE_MASK
+    82 0000008A E8(00000000)                 call       gtk_widget_add_events
+    83                                  
+    84                                       ; 3. Signal Connections
+    85 0000008F 4531C9                       xor        r9d, r9d
+    86 00000092 4531C0                       xor        r8d, r8d
+    87 00000095 4831C9                       xor        rcx, rcx
+    88 00000098 48BA-                        mov        rdx, gtk_main_quit
+    88 0000009A [0000000000000000] 
+    89 000000A2 48BE-                        mov        rsi, signal.destroy
+    89 000000A4 [0F00000000000000] 
+    90 000000AC 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+    91 000000B4 E8(00000000)                 call       g_signal_connect_data
+    92                                  
+    93 000000B9 4531C9                       xor        r9d, r9d
+    94 000000BC 4531C0                       xor        r8d, r8d
+    95 000000BF 4831C9                       xor        rcx, rcx
+    96 000000C2 48BA-                        mov        rdx, frame_callback
+    96 000000C4 [FD00000000000000] 
+    97 000000CC 48BE-                        mov        rsi, signal.configure
+    97 000000CE [1700000000000000] 
+    98 000000D6 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+    99 000000DE E8(00000000)                 call       g_signal_connect_data
+   100                                  
+   101 000000E3 488B3C25[00000000]           mov        rdi, qword [mainwindow.handle]
+   102 000000EB E8(00000000)                 call       gtk_widget_show_all
+   103 000000F0 E8(00000000)                 call       gtk_main
+   104                                  
+   105 000000F5 4831FF                       xor        rdi, rdi
+   106 000000F8 E8(00000000)                 call       exit
+   107                                  
+   108                                  ; Callback: frame_callback
+   109                                  frame_callback:
+   110 000000FD 4156                         push       r14
+   111 000000FF 4157                         push       r15
+   112 00000101 55                           push       rbp
+   113 00000102 4889E5                       mov        rbp, rsp
+   114 00000105 4883E4F0                     and        rsp, -16
+   115                                  
+   116 00000109 4989FF                       mov        r15, rdi
+   117 0000010C 4989F6                       mov        r14, rsi
+   118                                  
+   119 0000010F 458B4E20                     mov        r9d, dword [r14 + GdkEventConfigure.height]
+   120 00000113 458B461C                     mov        r8d, dword [r14 + GdkEventConfigure.width]
+   121 00000117 418B4E18                     mov        ecx, dword [r14 + GdkEventConfigure.y]
+   122 0000011B 418B5614                     mov        edx, dword [r14 + GdkEventConfigure.x]
+   123                                  
+   124 0000011F 48BF-                        mov        rdi, message.buffer
+   124 00000121 [5000000000000000] 
+   125 00000129 48BE-                        mov        rsi, message.format
+   125 0000012B [2700000000000000] 
+   126 00000133 4831C0                       xor        rax, rax
+   127 00000136 E8(00000000)                 call       sprintf
+   128                                  
+   129 0000013B 4C89FF                       mov        rdi, r15
+   130 0000013E 48BE-                        mov        rsi, message.buffer
+   130 00000140 [5000000000000000] 
+   131 00000148 E8(00000000)                 call       gtk_window_set_title
+   132                                  
+   133 0000014D C9                           leave
+   134 0000014E 415F                         pop        r15
+   135 00000150 415E                         pop        r14
+   136 00000152 4831C0                       xor        rax, rax ; FALSE
+   137 00000155 C3                           ret
