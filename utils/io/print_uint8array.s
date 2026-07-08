@@ -5,10 +5,11 @@
  * Aligns single digits for clean columns and supports items-per-line.
  *
  * ABI           : System V AMD64 (Linux)
- * Input         : %rdi = Buffer pointer (uint8_t*)
- * %rsi = Number of elements
- * %rdx = Items per line (0 for infinite)
- * Output        : Prints to stdout
+ * Input         : %rdi = File Descriptor (1=stdout, 2=stderr)
+ * %rsi = Buffer pointer (uint8_t*)
+ * %rdx = Number of elements
+ * %rcx = Items per line (0 for infinite)
+ * Output        : Prints to FD
  * **************************************************************************
  */
 
@@ -16,29 +17,28 @@
     .Lp_spacer: .byte ' '
     .Lp_eol:    .byte '\n'
 
-.section .bss
-    .align 16
-    .Lp_conv_buf: .skip 16
-
 .section .text
 .globl print_uint8array
 .type print_uint8array, @function
+.extern u64toa
 
 print_uint8array:
-    pushq   %rbp
-    movq    %rsp, %rbp
-    # Save callee-saved registers
-    pushq   %r12                    # File Descriptor
-    pushq   %r13                    # Buffer Pointer
-    pushq   %r14                    # Total Elements
-    pushq   %r15                    # Items per line limit
-    pushq   %rbx                    # Current line counter
+    # --- Stack & Register Setup ---
+    # On entry, %rsp is (16*N + 8).
+    pushq   %r12                    # %rsp = 16*N + 0
+    pushq   %r13                    # %rsp = 16*N + 8
+    pushq   %r14                    # %rsp = 16*N + 0
+    pushq   %r15                    # %rsp = 16*N + 8
+    pushq   %rbx                    # %rsp = 16*N + 0 (Perfectly aligned!)
+    
+    subq    $16, %rsp               # Allocate 16 bytes on stack for thread-safe buffer
+                                    # %rsp remains perfectly 16-byte aligned
 
     # Move parameters to safe registers
     movq    %rdi, %r12              # FD
     movq    %rsi, %r13              # Pointer
     movq    %rdx, %r14              # Count
-    movq    %rcx, %r15              # Per line
+    movq    %rcx, %r15              # Per line limit
     xorq    %rbx, %rbx              # Line counter = 0
 
 .Lloop_start:
@@ -51,18 +51,18 @@ print_uint8array:
     cmpb    $10, %al
     jge     .Lconvert
 
-    pushq   %rax                    # Save card value
+    pushq   %rax                    # Save array value
     movq    $1, %rax                # sys_write
     movq    %r12, %rdi              # User's FD
     leaq    .Lp_spacer(%rip), %rsi
     movq    $1, %rdx
     syscall
-    popq    %rax
+    popq    %rax                    # Restore array value
 
 .Lconvert:
     # --- Step 2: Convert ---
-    movq    %rax, %rdi              # Value
-    leaq    .Lp_conv_buf(%rip), %rsi 
+    movq    %rax, %rdi              # Value to convert
+    movq    %rsp, %rsi              # Use our local stack buffer as the destination!
     movq    $16, %rdx
     call    u64toa                  # Returns RSI=ptr, RDX=len
 
@@ -83,7 +83,7 @@ print_uint8array:
     incq    %r13                    # Next byte
     decq    %r14                    # One less to go
     
-    testq   %r15, %r15              # Line check?
+    testq   %r15, %r15              # Line limit enabled?
     jz      .Lloop_start
     
     incq    %rbx
@@ -109,12 +109,13 @@ print_uint8array:
     syscall
 
 .Lexit:
+    # --- Teardown ---
+    addq    $16, %rsp               # Free the local stack buffer
     popq    %rbx
     popq    %r15
     popq    %r14
     popq    %r13
     popq    %r12
-    popq    %rbp
     ret
 
 .size print_uint8array, .-print_uint8array

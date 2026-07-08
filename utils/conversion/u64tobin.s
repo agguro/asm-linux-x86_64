@@ -10,9 +10,8 @@
  * %rdx = width of the string used
  *
  * Strategy:
- * The function utilizes the 'shlq' and 'adcb' pattern. By shifting the MSB 
- * into the carry flag and adding that flag to the ASCII value of '0', we 
- * generate bits without conditional branching in the main loop.
+ * Leaf function: Zero stack usage. Utilizes volatile registers (r8-r11) 
+ * to preserve original arguments and track states without pushing to memory.
  * ************************************************************************** */
 
 .section .text
@@ -20,35 +19,30 @@
 .type u64tobin, @function
 
 u64tobin:
-    pushq   %rbp
-    movq    %rsp, %rbp
-    pushq   %rbx
-    pushq   %rcx
-    pushq   %rsi            # [rbp-24] Save original buffer start
+    # --- Register Setup (No Stack!) ---
+    movq    %rsi, %r10      # %r10 = Save original buffer start
+    movq    %rdx, %r11      # %r11 = Save mode / target width
 
     # 1. Handle Auto-Detect Mode
-    cmpq    $-1, %rdx
+    cmpq    $-1, %r11
     jne     .Lcheck_trim
     lzcntq  %rdi, %rcx      # Get number of leading zeros
-    movq    $64, %rdx
-    subq    %rcx, %rdx      # Width = 64 - zeros
+    movq    $64, %r11
+    subq    %rcx, %r11      # Width = 64 - zeros
     jnz     .Lconvert
-    movq    $1, %rdx        # If value is 0, width is 1
+    movq    $1, %r11        # If value is 0, width is 1
     jmp     .Lconvert
 
 .Lcheck_trim:
-    testq   %rdx, %rdx
+    testq   %r11, %r11
     jnz     .Lconvert
     # Mode 0 (trim) logic is processed after conversion loop
 
 .Lconvert:
-    pushq   %rdx            # [rbp-32] Store target width
-    movq    %rdi, %rax      # Load value
-    movq    %rsi, %rdi      # Set write pointer
-    movq    $64, %rcx       # Loop counter
-    xorq    %rbx, %rbx      # Reset 'first 1' pointer
-
-
+    movq    %rdi, %rax      # %rax = Load working value
+    movq    %rsi, %rdi      # %rdi = Set write pointer (overwriting original value)
+    movq    $64, %rcx       # %rcx = Loop counter
+    xorq    %r9, %r9        # %r9  = 'first 1' pointer (Replaces %rbx)
 
 .Lloop:
     xorl    %r8d, %r8d
@@ -58,9 +52,9 @@ u64tobin:
     
     cmpb    $'1', %r8b
     jne     .Lnext
-    testq   %rbx, %rbx
+    testq   %r9, %r9
     jnz     .Lnext
-    movq    %rdi, %rbx      # Capture pointer to first '1'
+    movq    %rdi, %r9       # Capture pointer to first '1'
 
 .Lnext:
     incq    %rdi
@@ -68,36 +62,30 @@ u64tobin:
     movb    $0, (%rdi)      # Null terminator
 
     # --- Result Calculation ---
-    popq    %rdx            # Restore target width
-    movq    -24(%rbp), %rsi # Restore original buffer start
-
-    testq   %rdx, %rdx
+    testq   %r11, %r11
     jz      .Ltrim_logic    # If mode 0, find first '1'
 
-    # Fixed Width: Start = BufferStart + (64 - Width)
+    # Fixed Width Exit
     movq    $64, %rax
-    subq    %rdx, %rax
-    addq    %rsi, %rax      # Calculate final start pointer
-    jmp     .Lexit
+    subq    %r11, %rax
+    addq    %r10, %rax      # %rax = Calculate final start pointer using %r10
+    movq    %r11, %rdx      # %rdx = Return width
+    ret                     # Fast exit
 
 .Ltrim_logic:
-    testq   %rbx, %rbx
+    testq   %r9, %r9
     jnz     .Lfound_one
-    leaq    63(%rsi), %rax  # Pointer to the last '0'
-    movq    $1, %rdx
-    jmp     .Lexit
+    
+    # All Zeros Exit
+    leaq    63(%r10), %rax  # %rax = Pointer to the last '0'
+    movq    $1, %rdx        # %rdx = Width is 1
+    ret                     # Fast exit
 
 .Lfound_one:
-    movq    %rbx, %rax      # Pointer to first '1'
-    leaq    64(%rsi), %rdx
-    subq    %rbx, %rdx      # Calculate effective width
-
-.Lexit:
-    popq    %rsi            # Restore caller's RSI
-    popq    %rcx
-    popq    %rbx
-    popq    %rbp
-    ret
+    movq    %r9, %rax       # %rax = Pointer to first '1'
+    leaq    64(%r10), %rdx
+    subq    %r9, %rdx       # %rdx = Calculate effective width
+    ret                     # Fast exit
 
 .size u64tobin, .-u64tobin 
 .section .note.GNU-stack,"",@progbits

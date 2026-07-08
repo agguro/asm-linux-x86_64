@@ -24,22 +24,18 @@ sattolo_shuffle:
     cmpq    $2, %rsi                # Sattolo requires at least 2 elements
     jl      .Ldone
     
-    # Initialize 1..N
-    movq    %rsi, %rcx
-1:  movb    %cl, -1(%rdi, %rcx)
-    loop    1b
-
     movq    %rsi, %r8               # i = N
 .Lloop:
-    decq    %r8                     # i--
+    decq    %r8                     # i-- (Current index)
     jz      .Ldone
 
     # Generate random j in range [0, i-1]
-    rdtsc                           #
+    rdtsc                           
     shrq    $3, %rax
     xorq    %rdx, %rdx
-    movq    %r8, %rbx               # Divisor = i (Excludes current index)
-    divq    %rbx                    # RDX = remainder j
+    
+    movq    %r8, %r9                # FIXED: Use volatile %r9 instead of %rbx!
+    divq    %r9                     # RDX = remainder j in [0, i-1]
 
     # --- MOV Swap ---
     movb    (%rdi, %r8), %al
@@ -50,7 +46,7 @@ sattolo_shuffle:
     jmp     .Lloop
 
 .Ldone:
-    ret
+    ret                             # Fast exit
 
 .size sattolo_shuffle, .-sattolo_shuffle
 .section .note.GNU-stack,"",@progbits

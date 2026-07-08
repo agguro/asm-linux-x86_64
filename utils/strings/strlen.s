@@ -10,8 +10,8 @@
  * 1. Byte-align the pointer to an 8-byte boundary to ensure safety.
  * 2. Load 8 bytes at a time into a quadword register.
  * 3. Apply the formula ((x - 0x01...) & ~x & 0x80...) to detect a NULL byte.
- * 4. Use 'bsfq' (Bit Scan Forward) to locate the exact byte within the 
- * register once a NULL is detected.
+ * 4. Use 'bsfq' (Bit Scan Forward) to locate the exact byte.
+ * Leaf function: Zero stack usage. Uses volatile %rcx instead of %rbx.
  * ************************************************************************** */
 
 .section .text
@@ -19,10 +19,7 @@
 .type strlen, @function
 
 strlen:
-    # --- Prologue ---
-    pushq   %rbp            # Save caller's frame pointer
-    movq    %rsp, %rbp      # Establish 16-byte alignment
-    pushq   %rbx            # Preserve callee-saved RBX
+    # --- Setup (No Stack Frame) ---
     movq    %rdi, %rax      # Working pointer
 
     # --- Step 1: Align to 8-byte boundary ---
@@ -41,16 +38,14 @@ strlen:
     movabsq $0x8080808080808080, %r9  # Mask for most significant bits
 
     # --- Step 3: Main Loop (Processing 8 bytes at a time) ---
-
-
 4:
     movq    (%rax), %rdx    # LOAD 8 bytes
-    movq    %rdx, %rbx
+    movq    %rdx, %rcx      # Use volatile %rcx instead of %rbx
 
-    subq    %r8, %rbx       # (x - 0x01...)
+    subq    %r8, %rcx       # (x - 0x01...)
     notq    %rdx            # ~x
-    andq    %rdx, %rbx      # (x - 0x01...) & ~x
-    andq    %r9, %rbx       # ... & 0x80...
+    andq    %rdx, %rcx      # (x - 0x01...) & ~x
+    andq    %r9, %rcx       # ... & 0x80...
 
     jnz     5f              # If non-zero, a NULL was found
     addq    $8, %rax        # Move to next quadword
@@ -58,16 +53,14 @@ strlen:
 
     # --- Step 4: Identify NULL position ---
 5:
-    bsfq    %rbx, %rbx      # Find the first '1' bit
-    shrq    $3, %rbx        # Bit index to byte offset (bits / 8)
-    addq    %rbx, %rax      # Add offset to current pointer
+    bsfq    %rcx, %rcx      # Find the first '1' bit
+    shrq    $3, %rcx        # Bit index to byte offset (bits / 8)
+    addq    %rcx, %rax      # Add offset to current pointer
 
     # --- Step 5: Final Calculation and Exit ---
 3:
     subq    %rdi, %rax      # Result = Current Pointer - Start Pointer
-    popq    %rbx            # Restore RBX
-    popq    %rbp            # Restore RBP
-    ret                     
+    ret                     # Fast exit
 
 .size strlen, .-strlen
 .section .note.GNU-stack,"",@progbits

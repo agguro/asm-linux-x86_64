@@ -1,18 +1,16 @@
 /*
- $**************************************************************************
+ ***************************************************************************
  * Name        : fisher_yates_shuffle.s
  * Description : Performs an unbiased, linear-time (O(n)) shuffle of a buffer.
  * Ensures every possible permutation of the deck is equally likely.
  *
  * ABI         : System V AMD64 (Linux)
- * Input       : %rdi = Pointer to the buffer (e.g., deck of cards)
+ * Input       : %rdi = Pointer to the buffer
  * %rsi = Number of elements in the buffer (N)
  * Output      : None (Buffer is shuffled in-place)
  *
- * Strategy    : Uses the Knuth Shuffle logic: Iterates from the end of the 
- * buffer to the front, swapping the current element 'i' with 
- * a random element 'j' selected from the range [0, i]. 
- * Uses the 'rdtsc' instruction for high-resolution entropy.
+ * Strategy    : Pure Leaf Function (Zero Stack). Uses volatile %r9 instead 
+ * of %rbx for division to maintain strict ABI compliance.
  * **************************************************************************
  */
 
@@ -24,23 +22,19 @@ fisher_yates_shuffle:
     testq   %rsi, %rsi              # Handle 0-length case
     jz      .Ldone
     
-    # Initialize buffer with 1..N
-    movq    %rsi, %rcx
-1:  movb    %cl, -1(%rdi, %rcx)
-    loop    1b
-
     movq    %rsi, %r8               # i = N
 .Lloop:
     decq    %r8                     # i-- (goes from N-1 down to 1)
     jz      .Ldone
 
     # Generate random j in range [0, i]
-    rdtsc                           # Get entropy
+    rdtsc                           # Get entropy (EDX:EAX)
     shrq    $3, %rax                # Apply empirical shift
-    xorq    %rdx, %rdx
-    movq    %r8, %rbx
-    incq    %rbx                    # Divisor = i + 1
-    divq    %rbx                    # RDX = remainder j
+    xorq    %rdx, %rdx              # Clear upper bits for division
+    
+    movq    %r8, %r9                # Use caller-saved %r9 instead of %rbx!
+    incq    %r9                     # Divisor = i + 1
+    divq    %r9                     # RDX = remainder j
 
     # --- MOV Swap (Performance Optimized) ---
     movb    (%rdi, %r8), %al        # Load buffer[i]
@@ -51,7 +45,7 @@ fisher_yates_shuffle:
     jmp     .Lloop
 
 .Ldone:
-    ret
+    ret                             # Fast exit
 
 .size fisher_yates_shuffle, .-fisher_yates_shuffle
 .section .note.GNU-stack,"",@progbits

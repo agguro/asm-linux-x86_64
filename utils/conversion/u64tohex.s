@@ -14,6 +14,7 @@
  * of the buffer and moving backwards, the digits naturally end up in the 
  * correct order without requiring a separate "string reverse" pass. It then
  * prepends the "0x" prefix if space permits.
+ * Leaf function: Zero stack usage. Perfectly ABI-compliant.
  * ************************************************************************** */
 
 .section .text
@@ -21,9 +22,7 @@
 .type u64tohex, @function
 
 u64tohex:
-    pushq   %rbp                
-    movq    %rsp, %rbp      
-
+    # --- Setup (No Stack Frame) ---
     leaq    (%rsi, %rdx), %rcx      # End of buffer
     movq    %rcx, %r9               # Save for length math
     movq    %rdi, %rax              
@@ -63,13 +62,11 @@ u64tohex:
     subq    %rcx, %rdx              # Calculate final length
     movq    %rcx, %rsi              # Update RSI to start of "0x"
     xorq    %rax, %rax              # Return 0 (success)
-    popq    %rbp                    
-    ret
+    ret                             # Fast exit
 
 3:  # --- Error Exit ---
     movq    $1, %rax                # Return 1 (Overflow)
-    popq    %rbp                    
-    ret
+    ret                             # Fast exit
 
 .size u64tohex, .-u64tohex
 .section .note.GNU-stack,"",@progbits

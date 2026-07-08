@@ -13,6 +13,7 @@
  * This function performs division by 10 using a reciprocal multiplication
  * (Magic Number: 0xCCCCCCCCCCCCCCCD). This is significantly faster than
  * the hardware 'div' instruction. The buffer is filled from right to left.
+ * Leaf function: No stack frame required.
  * ************************************************************************** */
 
 .section .text
@@ -20,10 +21,6 @@
 .type u64toa, @function
 
 u64toa:
-    # --- Prologue ---
-    pushq   %rbp                    # Save caller's frame pointer
-    movq    %rsp, %rbp              # Establish stack frame
-
     # --- Setup ---
     leaq    (%rsi, %rdx), %rcx      # %rcx = End of buffer (writing backwards)
     movq    %rcx, %r9               # Save end address for length math
@@ -35,8 +32,6 @@ u64toa:
     decq    %rcx
     cmpq    %rsi, %rcx              # Buffer overflow check
     jl      2f                      # If %rcx < start, jump to error
-
-
 
     movq    %rax, %r11              # %r11 = temporary copy for modulo
     mulq    %r8                     # High 64 bits of result in %rdx
@@ -60,15 +55,12 @@ u64toa:
     subq    %rcx, %rdx              # %rdx = actual length
     movq    %rcx, %rsi              # %rsi = pointer to the first digit
     xorq    %rax, %rax              # Return status 0 (Success)
-    
-    popq    %rbp                    # Epilogue
-    ret
+    ret                             # Fast exit
 
     # --- Error Path ---
 2:
     movq    $1, %rax                # Return status 1 (Overflow)
-    popq    %rbp                    # Epilogue
-    ret
+    ret                             # Fast exit
 
 .size u64toa, .-u64toa    
 .section .note.GNU-stack,"",@progbits

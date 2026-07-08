@@ -15,9 +15,6 @@
 .globl nlz
 .type nlz, @function
 nlz:
-    # We treat this as a "leaf function" (no calls to other functions).
-    # Therefore, we skip the %rbp prologue to maximize execution speed.
-
     movq    %rdi, %rax
     testq   %rax, %rax
     jnz     .Lstart_nlz
@@ -45,12 +42,11 @@ nlz:
     shrq    $32, %rdx
     orq     %rdx, %rax
 
-    # RAX is now a contiguous block of 1s (e.g., 00001111)
-    popcntq %rax, %rax        # Count set bits (Significant Width)
-    movq    $64, %rdx
-    subq    %rax, %rdx        # 64 - Width = Leading Zeros
-    movq    %rdx, %rax
+    # RAX is now a contiguous block of 1s representing the magnitude.
+    # By inverting it, the leading zeros become 1s.
+    notq    %rax              
+    popcntq %rax, %rax        # Count the inverted 1s to get the leading zeros
     ret
 
-.size nls, .-nlz
+.size nlz, .-nlz 
 .section .note.GNU-stack,"",@progbits
