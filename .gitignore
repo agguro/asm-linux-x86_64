@@ -1,55 +1,26 @@
-# Prerequisites
-*.d
+# ==========================================
+# asm-linux-x86_64 .gitignore
+# ==========================================
 
-# Object files
+# --- 1. The Build Architecture ---
+# Completely ignores the isolated output trees (both release and debug)
+build/
+
+# --- 2. Assembly & Linker Artifacts ---
+# Fallbacks in case artifacts are ever generated outside the build/ dir
 *.o
-*.ko
-*.obj
-*.elf
-
-# Linker output
-*.ilk
-*.map
-*.exp
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
 *.a
-*.la
-*.lo
+*.lst
+*.map
 
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
+# --- 3. Executables ---
+# Standard Linux executable extensions and fallbacks
 *.out
-*.app
-*.i*86
-*.x86_64
-*.hex
+*.run
+*.bin
 
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
-
-# debug information files
-*.dwo
+# --- 4. Editor & OS Temporary Files ---
+*~
+*.swp
+*.swo
+.DS_Store
